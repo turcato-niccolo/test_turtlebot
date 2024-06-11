@@ -21,7 +21,7 @@ reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
 state_dim = 6
 action_dim = 2
 
-max_vel = [1.0, np.pi/4]
+max_vel = [2.0, np.pi/2]
 max_time = 10
 start_time = None
 
@@ -75,12 +75,12 @@ def callback(msg):
         reset()
         reward += -100
 
-    if np.sqrt((x[0]-OBSTACLE[0])**2 + (x[1]-4)**OBSTACLE[1]) < OBST_dist:
+    if np.sqrt((x[0]-OBSTACLE[0])**2 + (x[1]-OBSTACLE[1])**2) < OBST_dist:
         done = True
         reset()
         reward += -100
 
-    if np.sqrt((x[0]-GOAL[0])**2 + (x[1]-4)**GOAL[1]) < GOAL_dist:
+    if np.sqrt((x[0]-GOAL[0])**2 + (x[1]-GOAL[1])**2) < GOAL_dist:
         done = True
         reset()
         reward += +100
@@ -88,7 +88,7 @@ def callback(msg):
     if replay_buffer.size > 10 ** 3:
         action = (
                 policy.select_action(np.array(x))
-                + np.random.normal(0, 0.1, size=action_dim)
+                + np.random.normal(0, 0.2, size=action_dim)
         ).clip(-1, 1)
     else:
         action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1)
@@ -102,8 +102,8 @@ def callback(msg):
 
     next_state = x
     if old_state is not None:
-        reward += +1 if np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2) < np.sqrt((old_state[0]-GOAL[0])**2 + (old_state[1]-GOAL[1])**2) else -1
-        # reward += -np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)
+        # reward += +1 if np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2) < np.sqrt((old_state[0]-GOAL[0])**2 + (old_state[1]-GOAL[1])**2) else -1
+        reward += - 0.5 * np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)
 
     # reward = -np.sqrt((x[0]-1)**2 + (x[1]-4)**2)
     print('Reward', reward, 'state', x, 'action', action, done)
