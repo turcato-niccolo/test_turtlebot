@@ -12,6 +12,8 @@ import time
 import tf
 
 import numpy as np
+
+import ExpD3
 import OurDDPG, TD3, SAC
 import utils
 
@@ -27,8 +29,10 @@ start_time = None
 
 old_state = None
 old_action = None
-replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=10**4)
-policy = OurDDPG.DDPG(state_dim, action_dim, max_action=1)
+replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=10**5)
+# policy = TD3.TD3(state_dim, action_dim, max_action=1)
+# policy = ExpD3.DDPG(state_dim, action_dim, max_action=1)
+policy = OurDDPG.DDPG(state_dim, action_dim, max_action=1, tau=0.1)
 
 GOAL = [3, 0]
 OBSTACLE = [0, 0]
@@ -73,22 +77,22 @@ def callback(msg):
     if np.abs(x[0]) > WALL_dist or np.abs(x[1]) > WALL_dist:
         done = True
         reset()
-        reward += -100
+        reward += -10
 
     if np.sqrt((x[0]-OBSTACLE[0])**2 + (x[1]-OBSTACLE[1])**2) < OBST_dist:
         done = True
         reset()
-        reward += -100
+        reward += -10
 
     if np.sqrt((x[0]-GOAL[0])**2 + (x[1]-GOAL[1])**2) < GOAL_dist:
         done = True
         reset()
-        reward += +100
+        reward += +1000
 
     if replay_buffer.size > 10 ** 3:
         action = (
                 policy.select_action(np.array(x))
-                + np.random.normal(0, 0.2, size=action_dim)
+                + np.random.normal(0, 0.1, size=action_dim)
         ).clip(-1, 1)
     else:
         action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1)
@@ -102,8 +106,9 @@ def callback(msg):
 
     next_state = x
     if old_state is not None:
-        # reward += +1 if np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2) < np.sqrt((old_state[0]-GOAL[0])**2 + (old_state[1]-GOAL[1])**2) else -1
-        reward += - 0.5 * np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)
+        reward += +1 if np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2) < np.sqrt((old_state[0]-GOAL[0])**2 + (old_state[1]-GOAL[1])**2) else -1
+        # reward += -np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)
+        reward += 5 * np.exp(-((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)/4)
 
     # reward = -np.sqrt((x[0]-1)**2 + (x[1]-4)**2)
     print('Reward', reward, 'state', x, 'action', action, done)
@@ -115,6 +120,7 @@ def callback(msg):
         replay_buffer.add(old_state, old_action, next_state, reward, done_bool)
         if replay_buffer.size > 10**3:
             policy.train(replay_buffer)
+            print('train')
 
     old_state = next_state if not done else None
     old_action = action if not done else None
@@ -123,6 +129,7 @@ def callback(msg):
 
 
 if __name__ == "__main__":
+    reset()
     rospy.init_node('oodometry', anonymous=True) #make node
     rospy.Subscriber('/wcias_controller/odom', Odometry, callback, queue_size=1)
 
