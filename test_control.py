@@ -1,6 +1,5 @@
 import rospy
 
-import rospy
 import torch
 
 from nav_msgs.msg import Odometry
@@ -17,7 +16,7 @@ import ExpD3
 import OurDDPG, TD3, SAC
 import utils
 
-pub = rospy.Publisher('/wcias_controller/cmd_vel', Twist, queue_size=1)
+pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
 
 state_dim = 6
@@ -131,6 +130,6 @@ def callback(msg):
 if __name__ == "__main__":
     reset()
     rospy.init_node('oodometry', anonymous=True) #make node
-    rospy.Subscriber('/wcias_controller/odom', Odometry, callback, queue_size=1)
+    rospy.Subscriber('/odom', Odometry, callback, queue_size=1)
 
     rospy.spin()
