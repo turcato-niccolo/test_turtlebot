@@ -3,6 +3,12 @@ import gym
 from gym import spaces
 import numpy as np
 import pygame
+import matplotlib.pyplot as plt
+from tqdm import trange
+import os
+
+import OurDDPG
+import utils
 
 
 class MobileRobotEnv(gym.Env):
@@ -57,22 +63,28 @@ class MobileRobotEnv(gym.Env):
         obs[3:5] = self.p_dot
         obs[5] = self.alpha_dot
 
-        return copy.deepcopy(obs)
+        return copy.deepcopy(obs), {}
 
     def step(self, action):
+        # Position of the robot
         prev = copy.deepcopy(self.p)
+        # Velocity of the robot in planar env
         p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
+        # Update the position based on velocity
         self.p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
         self.p_dot = p_dot
 
+        # Angular velocity
         alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt
         self.alpha = self.alpha + alpha_dot
         self.alpha_dot = alpha_dot
 
+        # Ensure position and orientation are within limits
         self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
         self.alpha = self.alpha % (2*np.pi)
 
+        # Set the observation
         obs = np.zeros((6,))
         obs[:2] = self.p
         obs[2] = self.alpha / (2*np.pi)
@@ -82,22 +94,26 @@ class MobileRobotEnv(gym.Env):
         reward = 0
         terminated = False
 
-        # shaping
+        # REWARD SHAPING
 
-        # Penalty
+        # Penalty for reaching the map limit
         # if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
             # reward += -1000
             # terminated = True
-
+        
+        # Reward Penalty Based on Distance to Target
         # reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
+
+        # Reward based on exponenetial decay (Gaussian centered in the target)
         reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
 
+        # Penality for moving away from target
         if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
             reward += -1
         # else:
         #     reward += 1
 
-
+        # Obstacle zone - big penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
             reward += -100
             terminated = True
@@ -178,10 +194,67 @@ class MobileRobotEnv(gym.Env):
 # Example usage:
 if __name__ == '__main__':
     env = MobileRobotEnv()
-    obs = env.reset()
-    done = False
-    while not done:
-        action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    max_action = env.action_space.high[0]
+
+    # Create the DDPG agent
+    ddpg_agent = OurDDPG.DDPG(state_dim, action_dim, max_action)
+
+    # Hyperparameters
+    num_episodes = 10**3
+    max_steps = 10**3
+    replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
+
+    # List to store total rewards for each episode
+    rewards_list = []
+
+    # Create directory structure for saving data
+    save_path = './logs/MobileRobotEnv/DDPG/'
+    os.makedirs(save_path, exist_ok=True)
+
+    # Main training loop: iterate through the episodes
+    for episode in trange(num_episodes):
+        state, _ = env.reset()
+        done = False
+        total_reward = 0
+        steps = 0
+
+        while not done and steps < max_steps:
+            
+            if replay_buffer.size > 10 ** 3: # Select action from the agent plus exploration noise
+                action = (
+                    ddpg_agent.select_action(np.array(state))
+                    + np.random.normal(0, 0.1, size=action_dim)
+                ).clip(-1, 1)
+            else: # Take random actions for exploration
+                action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1)
+
+            # Execute the action in the environment, and observe the next state, reward, and whether done
+            next_state, reward, done, _ = env.step(action)
+            # Store the transition in replay buffer
+            replay_buffer.add(state, action, next_state, reward, done)
+
+            if replay_buffer.size > 10**3:
+                ddpg_agent.train(replay_buffer)
+
+            state = next_state
+
+            total_reward += reward
+            steps += 1
+        
         env.render()
+        rewards_list.append(total_reward)
+    
+    # Save the total rewards after training completes
+    np.save(os.path.join(save_path, 'DDPG_1.npy'), rewards_list)
+
     env.close()
+
+    # Plotting the rewards after training
+    plt.plot(rewards_list)
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.title('Total Rewards Over Episodes')
+    plt.grid()
+    plt.show()
