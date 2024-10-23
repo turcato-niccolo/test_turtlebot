@@ -226,9 +226,9 @@ if __name__ == '__main__':
                 action = (
                     ddpg_agent.select_action(np.array(state))
                     + np.random.normal(0, 0.1, size=action_dim)
-                ).clip(-1, 1)
+                ).clip(-1, 1) # to check
             else: # Take random actions for exploration
-                action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1)
+                action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1) # to check
 
             # Execute the action in the environment, and observe the next state, reward, and whether done
             next_state, reward, done, _ = env.step(action)
@@ -247,7 +247,7 @@ if __name__ == '__main__':
         rewards_list.append(total_reward)
     
     # Save the total rewards after training completes
-    np.save(os.path.join(save_path, 'DDPG_1.npy'), rewards_list)
+    np.save(os.path.join(save_path, 'DDPG_2.npy'), rewards_list)
 
     env.close()
 
