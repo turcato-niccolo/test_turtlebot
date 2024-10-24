@@ -19,6 +19,7 @@ class MobileRobotEnv(gym.Env):
         self.p_dot_0 = np.array([0, 0])
         self.alpha_dot_0 = 0
         self.alpha_0 = 0
+        self.theta_0 = 0
         self.w = 0.5
         self.d = 0.2
         self.p_g = np.array([1, 0])
@@ -57,6 +58,7 @@ class MobileRobotEnv(gym.Env):
         self.p_dot = copy.deepcopy(self.p_dot_0)
         self.alpha = copy.deepcopy(self.alpha_0)
         self.alpha_dot = copy.deepcopy(self.alpha_dot_0)
+        self.theta = copy.deepcopy(self.theta_0)
         obs = np.zeros((6,))
         obs[:2] = self.p
         obs[2] = self.alpha / (2*np.pi)
@@ -68,6 +70,7 @@ class MobileRobotEnv(gym.Env):
     def step(self, action):
         # Position of the robot
         prev = copy.deepcopy(self.p)
+        prev_theta = copy.deepcopy(self.theta)
         # Velocity of the robot in planar env
         p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
@@ -76,9 +79,9 @@ class MobileRobotEnv(gym.Env):
         self.p_dot = p_dot
 
         # Angular velocity
-        alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt
-        self.alpha = self.alpha + alpha_dot
-        self.alpha_dot = alpha_dot
+        alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt # Actualy this is the angular displacement after dt based on the input
+        self.alpha = self.alpha + alpha_dot # new angluar displacement 
+        self.alpha_dot = alpha_dot # is this wrong ? should be = (2 * np.clip(action[1], -1, 1))
 
         # Ensure position and orientation are within limits
         self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
@@ -105,22 +108,43 @@ class MobileRobotEnv(gym.Env):
         # reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
 
         # Reward based on exponenetial decay (Gaussian centered in the target)
-        reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
+        # reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
 
         # Penality for moving away from target
-        if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
-            reward += -1
+        #if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
+        #    reward += -1
         # else:
         #     reward += 1
 
-        # Obstacle zone - big penality
+        # Compute Rd (Distance-based)
+        Rd = 1 / np.linalg.norm(self.p - self.p_g)
+
+        # Compute Ra (Angle-based reward) range [-1, 1]
+        v_target = self.p_g - self.p
+        v_heading = np.array([np.cos(self.alpha), np.sin(self.alpha)])
+        v_target_norm = v_target / np.linalg.norm(v_target)
+        v_heading_norm = v_heading / np.linalg.norm(v_heading)
+        Ra = 3 * np.dot(v_target_norm, v_heading_norm) # = 3 * cos(theta)
+
+        # Compute Rs (Sway penalty)
+        # Compute the angle between the target and the heading
+        theta = np.arccos(Ra / 3)
+        # Ensure the angle is wrapped to the range [-π, π]
+        theta = np.arctan2(np.sin(theta), np.cos(theta))
+        self.theta = theta
+        Rs = -np.abs(theta - prev_theta)  # prev_alpha should be saved from the previous step
+
+        # Combine the rewards
+        reward = Rd + Ra + Rs
+
+        # Obstacle collision - penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
-            reward += -100
+            reward += -200
             terminated = True
 
-        # An episode is done iff the agent has reached the target
+        # Goal reached - bonus
         if np.linalg.norm(self.p - self.p_g) <= 0.05:
-            reward += 1000
+            reward += 200
             terminated = True
 
         info = self._get_info()
@@ -191,6 +215,29 @@ class MobileRobotEnv(gym.Env):
             pygame.quit()
             self.screen = None
 
+def evaluate_policy(env, agent, num_episodes=100):
+        total_rewards = []
+
+        for episode in range(num_episodes):
+            state, _ = env.reset()  # Reset the environment
+            done = False
+            total_reward = 0
+            
+            while not done:
+                # Select action from the agent without exploration noise
+                action = agent.select_action(np.array(state), deterministic=True)  # Assuming the agent can take a deterministic action
+                
+                # Execute the action in the environment
+                next_state, reward, done, _ = env.step(action)
+                total_reward += reward
+                
+                # Update state
+                state = next_state
+            
+            total_rewards.append(total_reward)
+
+        return total_rewards
+
 # Example usage:
 if __name__ == '__main__':
     env = MobileRobotEnv()
@@ -249,10 +296,13 @@ if __name__ == '__main__':
     # Save the total rewards after training completes
     np.save(os.path.join(save_path, 'DDPG_2.npy'), rewards_list)
 
+    # Evaluate the learned policy
+    rewards = evaluate_policy(env, ddpg_agent, num_episodes=100)
+
     env.close()
 
     # Plotting the rewards after training
-    plt.plot(rewards_list)
+    plt.plot(rewards)
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.title('Total Rewards Over Episodes')
