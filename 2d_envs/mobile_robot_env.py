@@ -74,13 +74,13 @@ class MobileRobotEnv(gym.Env):
         # Velocity of the robot in planar env
         p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
-        # Update the position based on velocity
+        # Position update
         self.p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
         self.p_dot = p_dot
 
-        # Angular velocity
+        # Angular update
         alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt # Actualy this is the angular displacement after dt based on the input
-        self.alpha = self.alpha + alpha_dot # new angluar displacement 
+        self.alpha = self.alpha + alpha_dot # new robot angle
         self.alpha_dot = alpha_dot # is this wrong ? should be = (2 * np.clip(action[1], -1, 1))
 
         # Ensure position and orientation are within limits
@@ -98,11 +98,6 @@ class MobileRobotEnv(gym.Env):
         terminated = False
 
         # REWARD SHAPING
-
-        # Penalty for reaching the map limit
-        # if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
-            # reward += -1000
-            # terminated = True
         
         # Reward Penalty Based on Distance to Target
         # reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
@@ -117,28 +112,31 @@ class MobileRobotEnv(gym.Env):
         #     reward += 1
 
         # Compute Rd (Distance-based)
-        Rd = 1 / np.linalg.norm(self.p - self.p_g)
-
+        Rd = 1 / (np.linalg.norm(self.p - self.p_g) + 1e-4) #
+        
         # Compute Ra (Angle-based reward) range [-1, 1]
-        v_target = self.p_g - self.p
-        v_heading = np.array([np.cos(self.alpha), np.sin(self.alpha)])
+        v_target = self.p_g - self.p                                        # vector from robot to traget
+        v_heading = np.array([np.cos(self.alpha), np.sin(self.alpha)])      # heading vector of robot
         v_target_norm = v_target / np.linalg.norm(v_target)
         v_heading_norm = v_heading / np.linalg.norm(v_heading)
-        Ra = 3 * np.dot(v_target_norm, v_heading_norm) # = 3 * cos(theta)
-
+        Ra = 3 * np.dot(v_target_norm, v_heading_norm)                      # scalar product of vectors = 3 * cos(theta)
+        
         # Compute Rs (Sway penalty)
-        # Compute the angle between the target and the heading
-        theta = np.arccos(Ra / 3)
-        # Ensure the angle is wrapped to the range [-π, π]
-        theta = np.arctan2(np.sin(theta), np.cos(theta))
-        self.theta = theta
-        Rs = -np.abs(theta - prev_theta)  # prev_alpha should be saved from the previous step
-
+        theta = np.arccos(Ra / 3)        # Compute the angle between the target and the heading
+        theta = theta % (2*np.pi)        # Ensure the angle is within the limit
+        self.theta = theta               # save for the prev_theta
+        Rs = -np.abs(theta - prev_theta) # compute the penality reward
+        
         # Combine the rewards
-        reward = Rd + Ra + Rs
-
+        reward += Rd + Ra + Rs
+        
         # Obstacle collision - penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
+            reward += -200
+            terminated = True
+        
+        # Penalty for reaching the map limit
+        if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
             reward += -200
             terminated = True
 
@@ -172,6 +170,11 @@ class MobileRobotEnv(gym.Env):
         pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_left, 5)
         pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_right, 5)
 
+        # Calculate arrow positions
+        arrow_length = 0.1
+        arrow_end = self.p + np.dot(R, np.array([arrow_length, 0]))
+        pygame.draw.line(self.screen, (0, 0, 0), agent_pos, self._to_screen_coordinates(arrow_end), 3)
+
         # Draw the target
         target_pos = self._to_screen_coordinates(self.p_g)
         pygame.draw.circle(self.screen, (255, 0, 0), target_pos, 10)
@@ -191,9 +194,6 @@ class MobileRobotEnv(gym.Env):
             penalty_area_top_left[0], penalty_area_top_left[1],
             width, height
         ))
-
-
-
 
         # Update the display
         pygame.display.flip()
@@ -215,13 +215,14 @@ class MobileRobotEnv(gym.Env):
             pygame.quit()
             self.screen = None
 
-def evaluate_policy(env, agent, num_episodes=100):
+# Policy evaluation function
+def evaluate_policy(env, agent, num_episodes=10):
         total_rewards = []
 
-        for episode in range(num_episodes):
+        for _ in range(num_episodes):
             state, _ = env.reset()  # Reset the environment
             done = False
-            total_reward = 0
+            avg_reward = 0.
             
             while not done:
                 # Select action from the agent without exploration noise
@@ -229,14 +230,17 @@ def evaluate_policy(env, agent, num_episodes=100):
                 
                 # Execute the action in the environment
                 next_state, reward, done, _ = env.step(action)
-                total_reward += reward
+                avg_reward += reward
                 
                 # Update state
                 state = next_state
+                env.render()
             
-            total_rewards.append(total_reward)
+        avg_reward /= num_episodes
 
-        return total_rewards
+        print("-----------------------------------")
+        print(f"Evaluation ove {num_episodes} episodes: {avg_reward:.3f}")
+        return avg_reward
 
 # Example usage:
 if __name__ == '__main__':
@@ -283,28 +287,32 @@ if __name__ == '__main__':
             replay_buffer.add(state, action, next_state, reward, done)
 
             if replay_buffer.size > 10**3:
-                ddpg_agent.train(replay_buffer)
+                ddpg_agent.train(replay_buffer,1024)
 
             state = next_state
 
             total_reward += reward
             steps += 1
+            #env.render()
         
         env.render()
         rewards_list.append(total_reward)
     
     # Save the total rewards after training completes
-    np.save(os.path.join(save_path, 'DDPG_2.npy'), rewards_list)
+    np.save(os.path.join(save_path, 'DDPG_3.npy'), rewards_list)
 
-    # Evaluate the learned policy
-    rewards = evaluate_policy(env, ddpg_agent, num_episodes=100)
-
-    env.close()
-
-    # Plotting the rewards after training
-    plt.plot(rewards)
+     # Plotting the rewards after training
+    plt.plot(rewards_list)
     plt.xlabel('Episode')
-    plt.ylabel('Total Reward')
+    plt.ylabel('Total Reward training')
     plt.title('Total Rewards Over Episodes')
     plt.grid()
     plt.show()
+
+    # Evaluate the learned policy
+    rewards = evaluate_policy(env, ddpg_agent, num_episodes=10)
+
+    # Save the total rewards after training completes
+    np.save(os.path.join(save_path, 'DDPG_evaluation_3.npy'), rewards)
+
+    env.close()
