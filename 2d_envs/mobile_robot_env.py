@@ -111,10 +111,16 @@ class MobileRobotEnv(gym.Env):
         # else:
         #     reward += 1
 
-        # Compute Rd (Distance-based)
-        Rd = 1 / (np.linalg.norm(self.p - self.p_g) + 1e-4) #
-        
-        # Compute Ra (Angle-based reward) range [-1, 1]
+        # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
+        Rd = 1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1 # add the offset to ensure initial penality for distance
+
+        theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
+        Ra = 3 * np.cos(theta)
+
+        self.theta = theta
+        Rs = -np.abs(theta - prev_theta)
+        """
+        # Compute Ra (Angle-based reward) range [-1, 1] * 3
         v_target = self.p_g - self.p                                        # vector from robot to traget
         v_heading = np.array([np.cos(self.alpha), np.sin(self.alpha)])      # heading vector of robot
         v_target_norm = v_target / np.linalg.norm(v_target)
@@ -126,7 +132,7 @@ class MobileRobotEnv(gym.Env):
         theta = theta % (2*np.pi)        # Ensure the angle is within the limit
         self.theta = theta               # save for the prev_theta
         Rs = -np.abs(theta - prev_theta) # compute the penality reward
-        
+        """
         # Combine the rewards
         reward += Rd + Ra + Rs
         
@@ -217,14 +223,14 @@ class MobileRobotEnv(gym.Env):
 
 # Policy evaluation function
 def evaluate_policy(env, agent, num_episodes=10):
-        total_rewards = []
 
         for _ in range(num_episodes):
             state, _ = env.reset()  # Reset the environment
             done = False
             avg_reward = 0.
+            steps = 0
             
-            while not done:
+            while not done and steps < 1000:
                 # Select action from the agent without exploration noise
                 action = agent.select_action(np.array(state))
                 
@@ -233,7 +239,7 @@ def evaluate_policy(env, agent, num_episodes=10):
                 avg_reward += reward
                 
                 # Update state
-                state = next_state
+                steps += 1
                 env.render()
             
         avg_reward /= num_episodes
@@ -266,7 +272,7 @@ if __name__ == '__main__':
     os.makedirs(save_path, exist_ok=True)
 
     # Main training loop: iterate through the episodes
-    for episode in trange(num_episodes):
+    for episode in range(num_episodes):
         state, _ = env.reset()
         done = False
         total_reward = 0
@@ -296,6 +302,10 @@ if __name__ == '__main__':
             steps += 1
             #env.render()
         
+        print("-----------------------------------")
+        print(f"Training over {episode} episodes: {total_reward / steps:.3f}")
+        print("-----------------------------------")
+
         #env.render()
         rewards_list.append(total_reward)
 
@@ -304,7 +314,7 @@ if __name__ == '__main__':
             rewards = evaluate_policy(env, ddpg_agent, num_episodes=10)
 
     # Save the total rewards after training completes
-    np.save(os.path.join(save_path, 'DDPG_3.npy'), rewards_list)
+    np.save(os.path.join(save_path, 'DDPG_4.npy'), rewards_list)
 
      # Plotting the rewards after training
     plt.plot(rewards_list)
@@ -313,3 +323,8 @@ if __name__ == '__main__':
     plt.title('Total Rewards Over Episodes')
     plt.grid()
     plt.show()
+
+
+print("---------")
+print("Finished")
+print("---------")
