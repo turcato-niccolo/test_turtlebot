@@ -226,7 +226,7 @@ def evaluate_policy(env, agent, num_episodes=10):
             
             while not done:
                 # Select action from the agent without exploration noise
-                action = agent.select_action(np.array(state), deterministic=True)  # Assuming the agent can take a deterministic action
+                action = agent.select_action(np.array(state))
                 
                 # Execute the action in the environment
                 next_state, reward, done, _ = env.step(action)
@@ -239,7 +239,8 @@ def evaluate_policy(env, agent, num_episodes=10):
         avg_reward /= num_episodes
 
         print("-----------------------------------")
-        print(f"Evaluation ove {num_episodes} episodes: {avg_reward:.3f}")
+        print(f"Evaluation over {num_episodes} episodes: {avg_reward:.3f}")
+        print("-----------------------------------")
         return avg_reward
 
 # Example usage:
@@ -295,9 +296,13 @@ if __name__ == '__main__':
             steps += 1
             #env.render()
         
-        env.render()
+        #env.render()
         rewards_list.append(total_reward)
-    
+
+        if episode % 200 == 0:
+            # Evaluate the learned policy
+            rewards = evaluate_policy(env, ddpg_agent, num_episodes=10)
+
     # Save the total rewards after training completes
     np.save(os.path.join(save_path, 'DDPG_3.npy'), rewards_list)
 
@@ -308,11 +313,3 @@ if __name__ == '__main__':
     plt.title('Total Rewards Over Episodes')
     plt.grid()
     plt.show()
-
-    # Evaluate the learned policy
-    rewards = evaluate_policy(env, ddpg_agent, num_episodes=10)
-
-    # Save the total rewards after training completes
-    np.save(os.path.join(save_path, 'DDPG_evaluation_3.npy'), rewards)
-
-    env.close()
