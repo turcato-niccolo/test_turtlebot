@@ -33,6 +33,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 			action = policy.select_action(np.array(state))
 			state, reward, done, _ = eval_env.step(action)
 			avg_reward += reward
+			steps += 1
 
 	avg_reward /= eval_episodes
 
@@ -158,7 +159,9 @@ if __name__ == "__main__":
 			state, done = env.reset(), False
 			episode_reward = 0
 			episode_timesteps = 0
-			episode_num += 1 
+			episode_num += 1
+		else:
+			print(f"Total T: {t+1} Episode Num: {episode_num+1}")
 
 		# Evaluate episode
 		if (t + 1) % args.eval_freq == 0:
