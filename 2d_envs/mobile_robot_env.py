@@ -78,9 +78,9 @@ class MobileRobotEnv(gym.Env):
         self.p_dot = p_dot
 
         # Angular update
-        alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt # Actualy this is the angular displacement after dt based on the input
-        self.alpha = self.alpha + alpha_dot # new robot angle
-        self.alpha_dot = alpha_dot # is this wrong ? should be = (2 * np.clip(action[1], -1, 1))
+        alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
+        self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
+        self.alpha_dot = alpha_dot
 
         # Ensure position and orientation are within limits
         self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
@@ -115,19 +115,19 @@ class MobileRobotEnv(gym.Env):
         #     reward += 1
 
         
-        Rd = 1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1 # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
+        Rd = 5 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 3 # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
         Ra = 3 * np.cos(theta)                                  # Compute Ra (Angle-based reward) range [-1, 1] * 3
         Rs = -np.abs(theta - prev_theta)                        # Compute Rs (Sway penalty)
         reward += Rd + Ra + Rs                                  # Combine the rewards
 
         # Obstacle collision - penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
-            reward += -200
+            reward += -50
             terminated = True
         
         # Penalty for reaching the map limit
         if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
-            reward += -200
+            reward += -50
             terminated = True
 
         # Goal reached - bonus

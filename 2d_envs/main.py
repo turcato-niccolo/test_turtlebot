@@ -29,11 +29,12 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 	
 	for _ in range(eval_episodes):
 		state, done = eval_env.reset(), False
-		while not done and steps < 1e3:
+		while not done and steps < eval_env._max_episode_steps:
 			action = policy.select_action(np.array(state))
 			state, reward, done, _ = eval_env.step(action)
 			avg_reward += reward
 			steps += 1
+			eval_env.render()
 
 	avg_reward /= eval_episodes
 
@@ -138,11 +139,10 @@ if __name__ == "__main__":
 			).clip(-max_action, max_action)
 
 		# Perform action
-		next_state, reward, done, _ = env.step(action) 
-		done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+		next_state, reward, done, _ = env.step(action)
 
 		# Store data in replay buffer
-		replay_buffer.add(state, action, next_state, reward, done_bool)
+		replay_buffer.add(state, action, next_state, reward, done)
 
 		state = next_state
 		episode_reward += reward
@@ -152,6 +152,9 @@ if __name__ == "__main__":
 		if t >= args.start_timesteps:
 			policy.train(replay_buffer, args.batch_size)
 
+		done = True if episode_timesteps >= env._max_episode_steps else done
+
+
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
 			print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
@@ -160,8 +163,6 @@ if __name__ == "__main__":
 			episode_reward = 0
 			episode_timesteps = 0
 			episode_num += 1
-		else:
-			print(f"Total T: {t+1} Episode Num: {episode_num+1}")
 
 		# Evaluate episode
 		if (t + 1) % args.eval_freq == 0:
