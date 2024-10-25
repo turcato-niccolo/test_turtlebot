@@ -44,6 +44,10 @@ class MobileRobotCorridorEnv(gym.Env):
 
     def _get_info(self):
         return {"distance": np.linalg.norm(self.p - self.p_g)}
+    
+    def seed(self, seed=None):
+        """Sets the seed for the environment."""
+        self.np_random = np.random.default_rng(seed)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -113,25 +117,26 @@ class MobileRobotCorridorEnv(gym.Env):
     def render(self, mode="human"):
         self.screen.fill((255, 255, 255))  # Fill the screen with white
 
-        # Draw the agent
+        # Calculate agent position and rotation
         agent_pos = self._to_screen_coordinates(self.p)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_pos, 10)
-
         R = np.array([[np.cos(self.alpha), -np.sin(self.alpha)],
-                      [np.sin(self.alpha), np.cos(self.alpha)]])
-        agent_top_right = self._to_screen_coordinates(self.p+np.dot(R, np.array([0.05, 0.025])))
-        agent_top_left = self._to_screen_coordinates(self.p+np.dot(R, np.array([-0.05, 0.025])))
-        agent_bottom_left = self._to_screen_coordinates(self.p+np.dot(R, np.array([-0.05, -0.025])))
-        agent_bottom_right = self._to_screen_coordinates(self.p+np.dot(R, np.array([0.05, -0.025])))
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_top_right, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_top_left, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_left, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_right, 5)
+                    [np.sin(self.alpha), np.cos(self.alpha)]])
+        
+        # Draw agent as a triangle to show orientation
+        front = self._to_screen_coordinates(self.p + np.dot(R, np.array([0.07, 0])))  # Pointy front end
+        back_left = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, 0.03])))
+        back_right = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, -0.03])))
+        pygame.draw.polygon(self.screen, (0, 0, 255), [front, back_left, back_right])  # Solid triangle
+        pygame.draw.polygon(self.screen, (0, 0, 0), [front, back_left, back_right], 2)  # Outline
 
-        # Draw the target
+        # Draw the target as a filled red circle with transparency
         target_pos = self._to_screen_coordinates(self.p_g)
-        # print(f"Target position: {self.p_g} -> Screen coordinates: {target_pos}")
-        pygame.draw.circle(self.screen, (255, 0, 0), target_pos, 10)  # Draw target as green circle
+        target_radius = 15
+        target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(target_surface, (255, 0, 0, 100), (target_radius, target_radius), target_radius)  # Semi-transparent fill
+        pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)    # Solid border
+        self.screen.blit(target_surface, (target_pos[0] - target_radius, target_pos[1] - target_radius))
+
 
         # Draw the objects
         for obj in self.objects:

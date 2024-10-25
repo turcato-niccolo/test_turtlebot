@@ -3,12 +3,7 @@ import gym
 from gym import spaces
 import numpy as np
 import pygame
-import matplotlib.pyplot as plt
 from tqdm import trange
-import os
-
-import OurDDPG
-import utils
 
 
 class MobileRobotEnv(gym.Env):
@@ -49,6 +44,10 @@ class MobileRobotEnv(gym.Env):
 
     def _get_info(self):
         return {"distance": np.linalg.norm(self.p - self.p_g)}
+    
+    def seed(self, seed=None):
+        """Sets the seed for the environment."""
+        self.np_random = np.random.default_rng(seed)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -65,7 +64,7 @@ class MobileRobotEnv(gym.Env):
         obs[3:5] = self.p_dot
         obs[5] = self.alpha_dot
 
-        return copy.deepcopy(obs), {}
+        return copy.deepcopy(obs)
 
     def step(self, action):
         # Position of the robot
@@ -86,6 +85,10 @@ class MobileRobotEnv(gym.Env):
         # Ensure position and orientation are within limits
         self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
         self.alpha = self.alpha % (2*np.pi)
+
+        # Pointing angle error
+        theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
+        self.theta = theta
 
         # Set the observation
         obs = np.zeros((6,))
@@ -111,31 +114,12 @@ class MobileRobotEnv(gym.Env):
         # else:
         #     reward += 1
 
-        # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
-        Rd = 1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1 # add the offset to ensure initial penality for distance
-
-        theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
-        Ra = 3 * np.cos(theta)
-
-        self.theta = theta
-        Rs = -np.abs(theta - prev_theta)
-        """
-        # Compute Ra (Angle-based reward) range [-1, 1] * 3
-        v_target = self.p_g - self.p                                        # vector from robot to traget
-        v_heading = np.array([np.cos(self.alpha), np.sin(self.alpha)])      # heading vector of robot
-        v_target_norm = v_target / np.linalg.norm(v_target)
-        v_heading_norm = v_heading / np.linalg.norm(v_heading)
-        Ra = 3 * np.dot(v_target_norm, v_heading_norm)                      # scalar product of vectors = 3 * cos(theta)
         
-        # Compute Rs (Sway penalty)
-        theta = np.arccos(Ra / 3)        # Compute the angle between the target and the heading
-        theta = theta % (2*np.pi)        # Ensure the angle is within the limit
-        self.theta = theta               # save for the prev_theta
-        Rs = -np.abs(theta - prev_theta) # compute the penality reward
-        """
-        # Combine the rewards
-        reward += Rd + Ra + Rs
-        
+        Rd = 1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1 # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
+        Ra = 3 * np.cos(theta)                                  # Compute Ra (Angle-based reward) range [-1, 1] * 3
+        Rs = -np.abs(theta - prev_theta)                        # Compute Rs (Sway penalty)
+        reward += Rd + Ra + Rs                                  # Combine the rewards
+
         # Obstacle collision - penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
             reward += -200
@@ -147,7 +131,7 @@ class MobileRobotEnv(gym.Env):
             terminated = True
 
         # Goal reached - bonus
-        if np.linalg.norm(self.p - self.p_g) <= 0.05:
+        if np.linalg.norm(self.p - self.p_g) <= 0.15:
             reward += 200
             terminated = True
 
@@ -159,51 +143,55 @@ class MobileRobotEnv(gym.Env):
         if self.screen is None:
             return
 
+        # Fill screen with white background
         self.screen.fill((255, 255, 255))
 
-        # Draw the agent
+        # Calculate agent position and rotation
         agent_pos = self._to_screen_coordinates(self.p)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_pos, 10)
-
         R = np.array([[np.cos(self.alpha), -np.sin(self.alpha)],
-                      [np.sin(self.alpha), np.cos(self.alpha)]])
-        agent_top_right = self._to_screen_coordinates(self.p+np.dot(R, np.array([0.05, 0.025])))
-        agent_top_left = self._to_screen_coordinates(self.p+np.dot(R, np.array([-0.05, 0.025])))
-        agent_bottom_left = self._to_screen_coordinates(self.p+np.dot(R, np.array([-0.05, -0.025])))
-        agent_bottom_right = self._to_screen_coordinates(self.p+np.dot(R, np.array([0.05, -0.025])))
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_top_right, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_top_left, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_left, 5)
-        pygame.draw.circle(self.screen, (0, 0, 255), agent_bottom_right, 5)
+                    [np.sin(self.alpha), np.cos(self.alpha)]])
+        
+        # Draw agent as a triangle to show orientation
+        front = self._to_screen_coordinates(self.p + np.dot(R, np.array([0.07, 0])))  # Pointy front end
+        back_left = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, 0.03])))
+        back_right = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, -0.03])))
+        pygame.draw.polygon(self.screen, (0, 0, 255), [front, back_left, back_right])  # Solid triangle
+        pygame.draw.polygon(self.screen, (0, 0, 0), [front, back_left, back_right], 2)  # Outline
 
-        # Calculate arrow positions
-        arrow_length = 0.1
+        """
+        # Draw orientation arrow
+        arrow_length = 0.15
         arrow_end = self.p + np.dot(R, np.array([arrow_length, 0]))
-        pygame.draw.line(self.screen, (0, 0, 0), agent_pos, self._to_screen_coordinates(arrow_end), 3)
-
-        # Draw the target
+        pygame.draw.line(self.screen, (0, 0, 0), agent_pos, self._to_screen_coordinates(arrow_end), 4)
+        """
+        
+        # Draw the target as a filled red circle with transparency
         target_pos = self._to_screen_coordinates(self.p_g)
-        pygame.draw.circle(self.screen, (255, 0, 0), target_pos, 10)
+        target_radius = 15
+        target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(target_surface, (255, 0, 0, 100), (target_radius, target_radius), target_radius)  # Semi-transparent fill
+        pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)    # Solid border
+        self.screen.blit(target_surface, (target_pos[0] - target_radius, target_pos[1] - target_radius))
 
-        # Draw the restricted area (penalty area)
+        # Draw penalty area with semi-transparent fill
         penalty_area_top_left = self._to_screen_coordinates(np.array([-self.d / 2, self.w / 2]))
-        penalty_area_top_right = self._to_screen_coordinates(np.array([self.d / 2, self.w / 2]))
+        # penalty_area_top_right = self._to_screen_coordinates(np.array([self.d / 2, self.w / 2]))
         penalty_area_bottom_right = self._to_screen_coordinates(np.array([self.d / 2, -self.w / 2]))
         penalty_area_bottom_left = self._to_screen_coordinates(np.array([-self.d / 2, -self.w / 2]))
 
-        # Calculate the width and height of the rectangle
+        # Draw penalty area border and filled rectangle
         width = penalty_area_bottom_right[0] - penalty_area_bottom_left[0]
         height = penalty_area_bottom_left[1] - penalty_area_top_left[1]
-
-        # Draw the rectangle
         pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(
-            penalty_area_top_left[0], penalty_area_top_left[1],
-            width, height
-        ))
+            penalty_area_top_left[0], penalty_area_top_left[1], width, height), 2)  # Border
+        penalty_area_surface = pygame.Surface((width, height), pygame.SRCALPHA)  # Transparent surface
+        penalty_area_surface.fill((0, 0, 0, 50))  # Semi-transparent fill
+        self.screen.blit(penalty_area_surface, penalty_area_top_left)
 
         # Update the display
         pygame.display.flip()
         self.clock.tick(200)
+
 
     def _to_screen_coordinates(self, pos):
         """
@@ -221,110 +209,16 @@ class MobileRobotEnv(gym.Env):
             pygame.quit()
             self.screen = None
 
-# Policy evaluation function
-def evaluate_policy(env, agent, num_episodes=10):
-
-        for _ in range(num_episodes):
-            state, _ = env.reset()  # Reset the environment
-            done = False
-            avg_reward = 0.
-            steps = 0
-            
-            while not done and steps < 1000:
-                # Select action from the agent without exploration noise
-                action = agent.select_action(np.array(state))
-                
-                # Execute the action in the environment
-                next_state, reward, done, _ = env.step(action)
-                avg_reward += reward
-                
-                # Update state
-                steps += 1
-                env.render()
-            
-        avg_reward /= num_episodes
-
-        print("-----------------------------------")
-        print(f"Evaluation over {num_episodes} episodes: {avg_reward:.3f}")
-        print("-----------------------------------")
-        return avg_reward
-
-# Example usage:
+# Example usage: (random steps in the environment)
 if __name__ == '__main__':
     env = MobileRobotEnv()
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    max_action = env.action_space.high[0]
+    obs = env.reset()
+    done = False
+    steps = 0
 
-    # Create the DDPG agent
-    ddpg_agent = OurDDPG.DDPG(state_dim, action_dim, max_action)
-
-    # Hyperparameters
-    num_episodes = 10**3
-    max_steps = 10**3
-    replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
-
-    # List to store total rewards for each episode
-    rewards_list = []
-
-    # Create directory structure for saving data
-    save_path = './logs/MobileRobotEnv/DDPG/'
-    os.makedirs(save_path, exist_ok=True)
-
-    # Main training loop: iterate through the episodes
-    for episode in range(num_episodes):
-        state, _ = env.reset()
-        done = False
-        total_reward = 0
-        steps = 0
-
-        while not done and steps < max_steps:
-            
-            if replay_buffer.size > 10 ** 3: # Select action from the agent plus exploration noise
-                action = (
-                    ddpg_agent.select_action(np.array(state))
-                    + np.random.normal(0, 0.1, size=action_dim)
-                ).clip(-1, 1) # to check
-            else: # Take random actions for exploration
-                action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1) # to check
-
-            # Execute the action in the environment, and observe the next state, reward, and whether done
-            next_state, reward, done, _ = env.step(action)
-            # Store the transition in replay buffer
-            replay_buffer.add(state, action, next_state, reward, done)
-
-            if replay_buffer.size > 10**3:
-                ddpg_agent.train(replay_buffer,1024)
-
-            state = next_state
-
-            total_reward += reward
-            steps += 1
-            #env.render()
-        
-        print("-----------------------------------")
-        print(f"Training over {episode} episodes: {total_reward / steps:.3f}")
-        print("-----------------------------------")
-
-        #env.render()
-        rewards_list.append(total_reward)
-
-        if episode % 200 == 0:
-            # Evaluate the learned policy
-            rewards = evaluate_policy(env, ddpg_agent, num_episodes=10)
-
-    # Save the total rewards after training completes
-    np.save(os.path.join(save_path, 'DDPG_4.npy'), rewards_list)
-
-     # Plotting the rewards after training
-    plt.plot(rewards_list)
-    plt.xlabel('Episode')
-    plt.ylabel('Total Reward training')
-    plt.title('Total Rewards Over Episodes')
-    plt.grid()
-    plt.show()
-
-
-print("---------")
-print("Finished")
-print("---------")
+    while steps <= 1e4:
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
+        steps += 1
+        env.render()
+    env.close()
