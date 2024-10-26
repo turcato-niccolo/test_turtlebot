@@ -114,26 +114,27 @@ class MobileRobotEnv(gym.Env):
         # else:
         #     reward += 1
 
-        
-        Rd = 5 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 3 # Compute Rd (Distance-based) range 1 / [1e-4, sqrt(5)] -1
-        Ra = 3 * np.cos(theta)                                  # Compute Ra (Angle-based reward) range [-1, 1] * 3
-        Rs = -np.abs(theta - prev_theta)                        # Compute Rs (Sway penalty)
-        reward += Rd + Ra + Rs                                  # Combine the rewards
+                                                                        # 5 / () - 3
+        Rd = (1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1)*5     # Compute Rd (Distance-based) range 1 / [0.15, 2.2] -1 = [-0.5, 5.5]*5
+        Ra = np.cos(theta) #/ 2                                         # Compute Ra (Angle-based reward) range [-1, 1]
+        Rs = -np.abs(theta - prev_theta) / (2*np.pi)                    # Compute Rs (Sway penalty) [-1, 0]
+        reward += Rd + Ra + Rs                                          # Combine the rewards
 
         # Obstacle collision - penality
         if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
-            reward += -50
+            reward = -100 # -50
             terminated = True
         
         # Penalty for reaching the map limit
         if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
-            reward += -50
+            reward = -100 # -50
             terminated = True
 
         # Goal reached - bonus
         if np.linalg.norm(self.p - self.p_g) <= 0.15:
-            reward += 200
+            reward = +1000 # +500
             terminated = True
+            print("REACHED")
 
         info = self._get_info()
 
