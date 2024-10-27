@@ -43,7 +43,8 @@ class MobileRobotEnv(gym.Env):
         return {"agent": self.p, "target": self.p_g}
 
     def _get_info(self):
-        return {"distance": np.linalg.norm(self.p - self.p_g)}
+        #return {"distance": np.linalg.norm(self.p - self.p_g)}
+        return np.linalg.norm(self.p - self.p_g)
     
     def seed(self, seed=None):
         """Sets the seed for the environment."""
@@ -103,30 +104,31 @@ class MobileRobotEnv(gym.Env):
         # REWARD SHAPING
         
         # Reward Penalty Based on Distance to Target
-        # reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
+        reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
 
         # Reward based on exponenetial decay (Gaussian centered in the target)
-        # reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
+        reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
 
         # Penality for moving away from target
-        #if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
-        #    reward += -1
+        if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
+            reward += -1
         # else:
         #     reward += 1
-
+        """
                                                                         # 5 / () - 3
         Rd = (1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1)*5     # Compute Rd (Distance-based) range 1 / [0.15, 2.2] -1 = [-0.5, 5.5]*5
-        Ra = np.cos(theta) #/ 2                                         # Compute Ra (Angle-based reward) range [-1, 1]
+        Rd = np.clip(Rd,-2,15)
+        Ra = np.cos(theta)                                              # Compute Ra (Angle-based reward) range [-1, 1]
         Rs = -np.abs(theta - prev_theta) / (2*np.pi)                    # Compute Rs (Sway penalty) [-1, 0]
         reward += Rd + Ra + Rs                                          # Combine the rewards
-
-        # Obstacle collision - penality
-        if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
+        """
+        # Penalty for reaching the map limit
+        if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
             reward = -100 # -50
             terminated = True
         
-        # Penalty for reaching the map limit
-        if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
+        # Obstacle collision - penality
+        if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
             reward = -100 # -50
             terminated = True
 
@@ -135,6 +137,9 @@ class MobileRobotEnv(gym.Env):
             reward = +1000 # +500
             terminated = True
             print("REACHED")
+        #else:
+        #    reward += -5
+        
 
         info = self._get_info()
 
@@ -161,7 +166,7 @@ class MobileRobotEnv(gym.Env):
 
         """
         # Draw orientation arrow
-        arrow_length = 0.15
+        arrow_length = 0.20
         arrow_end = self.p + np.dot(R, np.array([arrow_length, 0]))
         pygame.draw.line(self.screen, (0, 0, 0), agent_pos, self._to_screen_coordinates(arrow_end), 4)
         """

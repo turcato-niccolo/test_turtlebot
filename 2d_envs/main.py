@@ -24,24 +24,27 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 		raise ValueError("Unknown environment specified")
 	
 	eval_env.seed(seed + 100)
-	steps = 0
 	avg_reward = 0.
+	target_reached = 0.
 	
-	for _ in range(eval_episodes):
+	for episode in range(eval_episodes):
 		state, done = eval_env.reset(), False
+		steps = 0
 		while not done and steps < eval_env._max_episode_steps * 1.5:
 			action = policy.select_action(np.array(state))
-			state, reward, done, _ = eval_env.step(action)
+			state, reward, done, info = eval_env.step(action)
 			avg_reward += reward
 			steps += 1
-			eval_env.render()
 
+			if episode == 9: eval_env.render()
+			if info <= 0.15: target_reached += 1	
+	
 	avg_reward /= eval_episodes
 
-	print("---------------------------------------")
-	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
-	print("---------------------------------------")
-	return avg_reward
+	print("------------------------------------------------------")
+	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f} - Success: {target_reached} / 10")
+	print("------------------------------------------------------")
+	return avg_reward, target_reached
 
 if __name__ == "__main__":
 	
@@ -118,12 +121,14 @@ if __name__ == "__main__":
 	replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
 	
 	# Evaluate untrained policy
-	evaluations = [eval_policy(policy, args.env, args.seed)]
+	evaluation , success = eval_policy(policy, args.env, args.seed)
+	evaluations , successes = [evaluation], [success]
 
 	state, done = env.reset(), False
 	episode_reward = 0
 	episode_timesteps = 0
 	episode_num = 0
+	target_reached = 0
 
 	for t in range(int(args.max_timesteps)):
 		
@@ -139,7 +144,7 @@ if __name__ == "__main__":
 			).clip(-max_action, max_action)
 
 		# Perform action
-		next_state, reward, done, _ = env.step(action)
+		next_state, reward, done, info = env.step(action)
 
 		# Store data in replay buffer
 		replay_buffer.add(state, action, next_state, reward, done)
@@ -150,7 +155,7 @@ if __name__ == "__main__":
 
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
-			policy.train(replay_buffer, args.batch_size*8)
+			policy.train(replay_buffer, args.batch_size*2)
 
 		done = True if episode_timesteps >= env._max_episode_steps * 1.5 else done
 
@@ -164,8 +169,19 @@ if __name__ == "__main__":
 			episode_timesteps = 0
 			episode_num += 1
 
+			if info <= 0.15:
+				target_reached += 1
+
 		# Evaluate episode
 		if (t + 1) % args.eval_freq == 0:
-			evaluations.append(eval_policy(policy, args.env, args.seed))
+			evaluation, success = eval_policy(policy, args.env, args.seed)
+			evaluations.append(evaluation)
+			successes.append(success)
 			np.save(f"./results/{file_name}", evaluations)
-			if args.save_model: policy.save(f"./models/{file_name}")
+			np.save(f"./results/{file_name}_s", successes)
+			#if args.save_model: policy.save(f"./models/{file_name}")
+			print("------------------------------------------------------")
+			print(f"Percentage of success: {target_reached} / {episode_num+1}")
+			print("------------------------------------------------------")
+		
+		if success == 10: policy.save(f"./models/{file_name}")
