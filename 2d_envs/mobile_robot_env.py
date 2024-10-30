@@ -46,8 +46,8 @@ def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
     Rd = np.clip(Rd, -2, 10) # Limit `Rd` to keep rewards stable
 
     # Angle-based reward
-    Ra = 0.5 * (np.cos(theta - prev_theta) + 1) # Range [0, 1]
-    # Ra = 0.5 * (np.cos(theta) + 1) # Range [0, 1]
+    # Ra = 0.5 * (np.cos(theta - prev_theta) + 1) # Range [0, 1]
+    Ra = 0.5 * (np.cos(theta) + 1) # Range [0, 1]
 
     # Sway penalty to reduce erratic movements
     Rs = -np.square(theta - prev_theta) / (2 * np.pi) # Penalize sharp angle changes
@@ -90,7 +90,6 @@ class MobileRobotEnv(gym.Env):
         self.p_dot_0 = np.array([0, 0])
         self.alpha_dot_0 = 0
         self.alpha_0 = 0 + random.uniform(-np.pi/4,np.pi/4)
-        self.theta_0 = 0
         self.w = 0.5
         self.d = 0.2
         self.p_g = np.array([1, 0])
@@ -100,6 +99,8 @@ class MobileRobotEnv(gym.Env):
         self.p_dot = copy.deepcopy(self.p_0)
         self.alpha = copy.deepcopy(self.alpha_0)
         self.alpha_dot = copy.deepcopy(self.alpha_0)
+
+        self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         self._max_episode_steps = 500
 
