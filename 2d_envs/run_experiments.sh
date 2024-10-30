@@ -14,10 +14,10 @@ do
     #--env "MR-corridor-env" \
     #--seed $i
     
-    python3 main.py \
-    --policy "ExpD3" \
-    --env "MR-env" \
-    --seed $i
+    #python3 main.py \
+    #--policy "ExpD3" \
+    #--env "MR-env" \
+    #--seed $i
 
     #python3 main.py \
     #--policy "ExpD3" \

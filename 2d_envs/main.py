@@ -30,7 +30,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 	for episode in range(eval_episodes):
 		state, done = eval_env.reset(), False
 		steps = 0
-		while not done and steps < eval_env._max_episode_steps * 1.5:
+		while not done and steps < eval_env._max_episode_steps:
 			action = policy.select_action(np.array(state))
 			state, reward, done, info = eval_env.step(action)
 			avg_reward += reward
@@ -41,9 +41,9 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 	
 	avg_reward /= eval_episodes
 
-	print("------------------------------------------------------")
-	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f} - Success: {target_reached} / 10")
-	print("------------------------------------------------------")
+	print("---------------------------------------------------------------------")
+	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f} - Steps: {steps} - Success: {target_reached} / 10")
+	print("---------------------------------------------------------------------")
 	return avg_reward, target_reached
 
 if __name__ == "__main__":
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 	parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
 	parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
 	parser.add_argument("--max_timesteps", default=1e6, type=int)   # Max time steps to run environment
-	parser.add_argument("--expl_noise", default=0.1, type=float)    # Std of Gaussian exploration noise
+	parser.add_argument("--expl_noise", default=0.5, type=float)    # Std of Gaussian exploration noise
 	parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
 	parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
 	parser.add_argument("--tau", default=0.005, type=float)         # Target network update rate
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 		if t >= args.start_timesteps:
 			policy.train(replay_buffer, args.batch_size*2)
 
-		done = True if episode_timesteps >= env._max_episode_steps * 1.5 else done
+		done = True if episode_timesteps >= env._max_episode_steps else done
 
 
 		if done: 
@@ -179,9 +179,10 @@ if __name__ == "__main__":
 			successes.append(success)
 			np.save(f"./results/{file_name}", evaluations)
 			np.save(f"./results/{file_name}_s", successes)
+			np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
-			print("------------------------------------------------------")
+			print("---------------------------------------------------------------------")
 			print(f"Percentage of success: {target_reached} / {episode_num+1}")
-			print("------------------------------------------------------")
+			print("---------------------------------------------------------------------")
 		
 		if success == 10: policy.save(f"./models/{file_name}")

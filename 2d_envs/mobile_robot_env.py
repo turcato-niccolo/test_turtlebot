@@ -3,17 +3,93 @@ import gym
 from gym import spaces
 import numpy as np
 import pygame
-from tqdm import trange
+import random
+
+def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
+        reward = 0
+        terminated = False
+
+        Rd = (1 / (np.linalg.norm(p_g - p) + 1e-4) - 1)*5     # Compute Rd (Distance-based) range 1 / [0.15, 2.2] -1 = [-0.45, 5.6]*5
+        # Rd = np.clip(Rd,-2,15)
+        Ra = np.cos(theta)                                              # Compute Ra (Angle-based reward) range [-1, 1]
+        # Ra = np.clip(Ra,-2,1)
+        Rs = -np.abs(theta - prev_theta) / (2*np.pi)                    # Compute Rs (Sway penalty) [-1, 0]
+        reward += Rd + Ra + Rs                                          # Combine the rewards
+
+        # Penalty for reaching the map limit
+        if np.abs(p[0]) == 1 or np.abs(p[1]) == 1:
+            reward += -100 # -50
+            terminated = True
+            print("WALL COLLISION")
+        
+        # Obstacle collision
+        if np.abs([0]) <= d / 2 and np.abs(p[1]) <= w / 2:
+            reward += -100 # -50
+            terminated = True
+            print("OBASTACLE COLLISION")
+
+        # Goal reached - bonus
+        if np.linalg.norm(p - p_g) <= 0.15:
+            reward += +1000 # +500
+            terminated = True
+            print("TARGET REACHED")
+        
+        return reward, terminated
+
+def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
+
+    reward = 0
+    terminated = False
+
+    # Distance-based reward with obstacle avoidance
+    Rd = 5 * (1 / (np.linalg.norm(p_g - p) + 1e-4) - 1)
+    Rd = np.clip(Rd, -2, 10) # Limit `Rd` to keep rewards stable
+
+    # Angle-based reward
+    Ra = 0.5 * (np.cos(theta - prev_theta) + 1) # Range [0, 1]
+    # Ra = 0.5 * (np.cos(theta) + 1) # Range [0, 1]
+
+    # Sway penalty to reduce erratic movements
+    Rs = -np.square(theta - prev_theta) / (2 * np.pi) # Penalize sharp angle changes
+
+    # Step penalty to encourage efficiency
+    reward = 0.5 * Rd + 0.3 * Ra + 0.2 * Rs - 0.01  # Small penalty per step
+
+    # Wall and obstacle collision penalties
+    if np.abs(p[0]) == 1 or np.abs(p[1]) == 1: # If it hits a boundary
+        reward -= 150
+        terminated = True
+        print("WALL COLLISION")
+
+    if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2: # If it hits the obstacle
+        reward -= 50
+        terminated = True
+        print("OBSTACLE COLLISION")
+
+    # Goal reward
+    if np.linalg.norm(p - p_g) <= 0.15:
+        reward += 1000 # Large reward for success
+        # Provare aggiungendo un reward in base al numero di steps
+        # (e.g 1000 - steps or 1000 + (500 - steps))
+        terminated = True
+        print("TARGET REACHED")
+
+    # Step penalty to encourage faster goal-reaching
+    reward -= 0.01
+
+
+    return reward, terminated
+
 
 
 class MobileRobotEnv(gym.Env):
     def __init__(self):
         super(MobileRobotEnv, self).__init__()
 
-        self.p_0 = np.array([-1, 0])
+        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15),random.uniform(-0.15,0.15)])
         self.p_dot_0 = np.array([0, 0])
         self.alpha_dot_0 = 0
-        self.alpha_0 = 0
+        self.alpha_0 = 0 + random.uniform(-np.pi/4,np.pi/4)
         self.theta_0 = 0
         self.w = 0.5
         self.d = 0.2
@@ -49,6 +125,7 @@ class MobileRobotEnv(gym.Env):
     def seed(self, seed=None):
         """Sets the seed for the environment."""
         self.np_random = np.random.default_rng(seed)
+        random.seed(seed)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -102,7 +179,7 @@ class MobileRobotEnv(gym.Env):
         terminated = False
 
         # REWARD SHAPING
-        
+        """
         # Reward Penalty Based on Distance to Target
         reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
 
@@ -115,31 +192,8 @@ class MobileRobotEnv(gym.Env):
         # else:
         #     reward += 1
         """
-                                                                        # 5 / () - 3
-        Rd = (1 / (np.linalg.norm(self.p_g - self.p) + 1e-4) - 1)*5     # Compute Rd (Distance-based) range 1 / [0.15, 2.2] -1 = [-0.5, 5.5]*5
-        Rd = np.clip(Rd,-2,15)
-        Ra = np.cos(theta)                                              # Compute Ra (Angle-based reward) range [-1, 1]
-        Rs = -np.abs(theta - prev_theta) / (2*np.pi)                    # Compute Rs (Sway penalty) [-1, 0]
-        reward += Rd + Ra + Rs                                          # Combine the rewards
-        """
-        # Penalty for reaching the map limit
-        if np.abs(self.p[0]) == 1 or np.abs(self.p[1]) == 1:
-            reward = -100 # -50
-            terminated = True
-        
-        # Obstacle collision - penality
-        if np.abs(self.p[0]) <= self.d / 2 and np.abs(self.p[1]) <= self.w / 2:
-            reward = -100 # -50
-            terminated = True
 
-        # Goal reached - bonus
-        if np.linalg.norm(self.p - self.p_g) <= 0.15:
-            reward = +1000 # +500
-            terminated = True
-            print("REACHED")
-        #else:
-        #    reward += -5
-        
+        reward, terminated = reward_function_2(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
 
         info = self._get_info()
 
@@ -163,17 +217,10 @@ class MobileRobotEnv(gym.Env):
         back_right = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, -0.03])))
         pygame.draw.polygon(self.screen, (0, 0, 255), [front, back_left, back_right])  # Solid triangle
         pygame.draw.polygon(self.screen, (0, 0, 0), [front, back_left, back_right], 2)  # Outline
-
-        """
-        # Draw orientation arrow
-        arrow_length = 0.20
-        arrow_end = self.p + np.dot(R, np.array([arrow_length, 0]))
-        pygame.draw.line(self.screen, (0, 0, 0), agent_pos, self._to_screen_coordinates(arrow_end), 4)
-        """
         
         # Draw the target as a filled red circle with transparency
         target_pos = self._to_screen_coordinates(self.p_g)
-        target_radius = 15
+        target_radius = 20
         target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(target_surface, (255, 0, 0, 100), (target_radius, target_radius), target_radius)  # Semi-transparent fill
         pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)    # Solid border
