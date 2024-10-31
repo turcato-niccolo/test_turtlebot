@@ -36,7 +36,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 			avg_reward += reward
 			steps += 1
 
-			if episode == 9: eval_env.render()
+			#if episode == 9: eval_env.render()
 			if info <= 0.15: target_reached += 1	
 	
 	avg_reward /= eval_episodes

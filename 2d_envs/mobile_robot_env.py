@@ -52,7 +52,7 @@ def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
     # Sway penalty to reduce erratic movements
     Rs = -np.square(theta - prev_theta) / (2 * np.pi) # Penalize sharp angle changes
 
-    # Step penalty to encourage efficiency
+    # Combine the rewards
     reward = 0.5 * Rd + 0.3 * Ra + 0.2 * Rs - 0.01  # Small penalty per step
 
     # Wall and obstacle collision penalties
@@ -110,11 +110,12 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        pygame.init()
-        self.screen = pygame.display.set_mode((self.window_size, self.window_size))
-        pygame.display.set_caption("Simple Mobile Robot Environment")
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 36)
+        #pygame.init()
+        #self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+        # self.screen = None
+        #pygame.display.set_caption("Simple Mobile Robot Environment")
+        #self.clock = pygame.time.Clock()
+        #self.font = pygame.font.Font(None, 36)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
@@ -130,6 +131,11 @@ class MobileRobotEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        # Re-randomize the initial position and angle on every reset
+        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         # Reset agent location
         self.p = copy.deepcopy(self.p_0)
@@ -241,6 +247,16 @@ class MobileRobotEnv(gym.Env):
         penalty_area_surface = pygame.Surface((width, height), pygame.SRCALPHA)  # Transparent surface
         penalty_area_surface.fill((0, 0, 0, 50))  # Semi-transparent fill
         self.screen.blit(penalty_area_surface, penalty_area_top_left)
+
+        # Draw possible spawn area as a semi-transparent green box
+        spawn_area_top_left = self._to_screen_coordinates(np.array([-1, 0.15]))
+        spawn_area_bottom_right = self._to_screen_coordinates(np.array([-0.85, -0.15]))
+        spawn_width = spawn_area_bottom_right[0] - spawn_area_top_left[0]
+        spawn_height = spawn_area_bottom_right[1] - spawn_area_top_left[1]
+        spawn_area_surface = pygame.Surface((spawn_width, spawn_height), pygame.SRCALPHA)  # Transparent surface
+        spawn_area_surface.fill((0, 255, 0, 50))  # Semi-transparent green fill
+        pygame.draw.rect(spawn_area_surface, (0, 255, 0), pygame.Rect(0, 0, spawn_width, spawn_height), 2)  # Solid border
+        self.screen.blit(spawn_area_surface, spawn_area_top_left)
 
         # Update the display
         pygame.display.flip()
