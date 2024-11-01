@@ -2,7 +2,7 @@
 
 # Scripts to reproduce results
 
-for ((i=0;i<2;i+=1))
+for ((i=2;i<10;i+=1))
 do
     #python3 main.py \
     #--policy "OurDDPG" \

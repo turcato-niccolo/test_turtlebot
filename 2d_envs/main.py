@@ -203,4 +203,8 @@ if __name__ == "__main__":
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
 			#print("---------------------------------------------------------------------")
 		
-		if success == 10: policy.save(f"./models/{file_name}")
+		if success == 10:
+			if args.policy == "SAC":
+				policy.save_checkpoint(file_name, suffix="")
+			else:
+				policy.save(f"./models/{file_name}")
