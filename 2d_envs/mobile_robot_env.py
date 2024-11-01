@@ -59,12 +59,12 @@ def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
     if np.abs(p[0]) == 1 or np.abs(p[1]) == 1: # If it hits a boundary
         reward -= 150
         terminated = True
-        print("WALL COLLISION")
+        #print("WALL COLLISION")
 
     if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2: # If it hits the obstacle
         reward -= 50
         terminated = True
-        print("OBSTACLE COLLISION")
+        #print("OBSTACLE COLLISION")
 
     # Goal reward
     if np.linalg.norm(p - p_g) <= 0.15:
@@ -72,7 +72,7 @@ def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
         # Provare aggiungendo un reward in base al numero di steps
         # (e.g 1000 - steps or 1000 + (500 - steps))
         terminated = True
-        print("TARGET REACHED")
+        #print("TARGET REACHED")
 
     # Step penalty to encourage faster goal-reaching
     reward -= 0.01

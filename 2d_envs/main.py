@@ -9,6 +9,7 @@ import utils
 import OurDDPG
 import ExpD3
 import TD3
+import SAC
 
 import mobile_robot_env as M
 import mobile_robot_corridor_env as MC
@@ -41,9 +42,9 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 	
 	avg_reward /= eval_episodes
 
-	print("---------------------------------------------------------------------")
-	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f} - Steps: {steps} - Success: {target_reached} / 10")
-	print("---------------------------------------------------------------------")
+	#print("---------------------------------------------------------------------")
+	#print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f} - Steps: {steps} - Success: {target_reached} / 10")
+	#print("---------------------------------------------------------------------")
 	return avg_reward, target_reached
 
 if __name__ == "__main__":
@@ -67,9 +68,9 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
-	print("---------------------------------------")
-	print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
-	print("---------------------------------------")
+	#print("---------------------------------------")
+	#print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
+	#print("---------------------------------------")
 
 	if not os.path.exists("./results"):
 		os.makedirs("./results")
@@ -113,6 +114,20 @@ if __name__ == "__main__":
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
 		policy = ExpD3.DDPG(**kwargs)
+	elif args.policy == "SAC":
+		kwargs = {
+			"num_inputs": state_dim,             	# The state dimension
+			"action_space": env.action_space,     	# The action space object
+			"gamma": args.discount,               	# Discount factor
+			"tau": args.tau,                     	# Soft update parameter
+			"alpha": 0.2,                        	# Initial alpha for entropy
+			"policy": "Gaussian",                 	# Policy type (for SAC)
+			"target_update_interval": 1,          	# Frequency of target network updates
+			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
+			"hidden_size": 256,                   	# Size of hidden layers
+			"lr": 3e-4                            	# Learning rate
+		}
+		policy = SAC.SAC(**kwargs)
 
 	if args.load_model != "":
 		policy_file = file_name if args.load_model == "default" else args.load_model
@@ -133,6 +148,9 @@ if __name__ == "__main__":
 	for t in range(int(args.max_timesteps)):
 		
 		episode_timesteps += 1
+
+		if t % 10e5 == 0:
+			print(f"Steps: {t}")
 
 		# Select action randomly or according to policy
 		if t < args.start_timesteps:
@@ -162,7 +180,7 @@ if __name__ == "__main__":
 
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
-			print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+			#print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
 			# Reset environment
 			state, done = env.reset(), False
 			episode_reward = 0
@@ -181,8 +199,8 @@ if __name__ == "__main__":
 			np.save(f"./results/{file_name}_s", successes)
 			np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
-			print("---------------------------------------------------------------------")
-			print(f"Percentage of success: {target_reached} / {episode_num+1}")
-			print("---------------------------------------------------------------------")
+			#print("---------------------------------------------------------------------")
+			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
+			#print("---------------------------------------------------------------------")
 		
 		if success == 10: policy.save(f"./models/{file_name}")
