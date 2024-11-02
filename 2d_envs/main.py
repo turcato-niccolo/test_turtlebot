@@ -15,7 +15,7 @@ import mobile_robot_env as M
 import mobile_robot_corridor_env as MC
 
 
-def eval_policy(policy, env_name, seed, eval_episodes=10):
+def eval_policy(policy, env_name, seed, eval_episodes=10, evaluate=False):
 
 	if env_name == "MR-env":
 		eval_env = M.MobileRobotEnv()
@@ -32,12 +32,15 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 		state, done = eval_env.reset(), False
 		steps = 0
 		while not done and steps < eval_env._max_episode_steps:
-			action = policy.select_action(np.array(state))
-			state, reward, done, info = eval_env.step(action)
+			if not evaluate:
+				action = policy.select_action(np.array(state))
+			else:
+				action = policy.select_action(np.array(state), evaluate)
+			state, reward, done, info = eval_env.step(action, steps)
 			avg_reward += reward
 			steps += 1
 
-			#if episode == 9: eval_env.render()
+			# if episode == 9: eval_env.render()
 			if info <= 0.15: target_reached += 1	
 	
 	avg_reward /= eval_episodes
@@ -55,8 +58,8 @@ if __name__ == "__main__":
 	parser.add_argument("--seed", default=0, type=int)              	# Sets Gym, PyTorch and Numpy seeds
 	parser.add_argument("--start_timesteps", default=25e3, type=int)	# Time steps initial random policy is used
 	parser.add_argument("--eval_freq", default=5e3, type=int)       	# How often (time steps) we evaluate
-	parser.add_argument("--max_timesteps", default=5*1e5, type=int) 	# Max time steps to run environment
-	parser.add_argument("--expl_noise", default=0.5, type=float)    	# Std of Gaussian exploration noise
+	parser.add_argument("--max_timesteps", default=1e6, type=int) 		# Max time steps to run environment
+	parser.add_argument("--expl_noise", default=0.1, type=float)    	# Std of Gaussian exploration noise
 	parser.add_argument("--batch_size", default=256, type=int)      	# Batch size for both actor and critic
 	parser.add_argument("--discount", default=0.99, type=float)     	# Discount factor
 	parser.add_argument("--tau", default=0.005, type=float)         	# Target network update rate
@@ -102,6 +105,7 @@ if __name__ == "__main__":
 		"discount": args.discount,
 		"tau": args.tau,
 	}
+	evaluate = False
 
 	# Initialize policy
 	if args.policy == "TD3":
@@ -128,6 +132,7 @@ if __name__ == "__main__":
 			"lr": 3e-4                            	# Learning rate
 		}
 		policy = SAC.SAC(**kwargs)
+		evaluate = True
 	else:
 		raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
@@ -138,7 +143,7 @@ if __name__ == "__main__":
 	replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
 	
 	# Evaluate untrained policy
-	evaluation , success = eval_policy(policy, args.env, args.seed)
+	evaluation , success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate)
 	evaluations , successes = [evaluation], [success]
 
 	state, done = env.reset(), False
@@ -147,24 +152,25 @@ if __name__ == "__main__":
 	episode_num = 0
 	target_reached = 0
 
+	
+
 	for t in range(int(args.max_timesteps)):
 		
 		episode_timesteps += 1
 
-		if t % 10e5 == 0:
-			print(f"Steps: {t}")
-
 		# Select action randomly or according to policy
 		if t < args.start_timesteps:
 			action = env.action_space.sample()
-		else:
+		elif  args.policy != "SAC":
 			action = (
-				policy.select_action(np.array(state))
-				+ np.random.normal(0, max_action * args.expl_noise, size=action_dim)
+			policy.select_action(np.array(state))
+			+ np.random.normal(0, max_action * args.expl_noise, size=action_dim)
 			).clip(-max_action, max_action)
+		else:
+			action = policy.select_action(np.array(state))
 
 		# Perform action
-		next_state, reward, done, info = env.step(action)
+		next_state, reward, done, info = env.step(action, episode_timesteps)
 
 		# Store data in replay buffer
 		replay_buffer.add(state, action, next_state, reward, done)
@@ -194,7 +200,7 @@ if __name__ == "__main__":
 
 		# Evaluate episode
 		if (t + 1) % args.eval_freq == 0:
-			evaluation, success = eval_policy(policy, args.env, args.seed)
+			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate)
 			evaluations.append(evaluation)
 			successes.append(success)
 			np.save(f"./results/{file_name}", evaluations)

@@ -27,7 +27,13 @@ class SAC(object):
         self.target_update_interval = target_update_interval
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
-        self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+        # self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+
+        # Cjeck for device
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")  # Use MPS on supported Macs
+        else:
+            self.device = torch.device("cpu")  # Fallback to CPU
 
         self.critic = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(device=self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr)
@@ -65,11 +71,11 @@ class SAC(object):
         # Sample a batch from memory
         state_batch, action_batch, next_state_batch, reward_batch, mask_batch = memory.sample(batch_size=batch_size)
 
-        """state_batch = torch.FloatTensor(state_batch).to(self.device)
+        state_batch = torch.FloatTensor(state_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
         reward_batch = torch.FloatTensor(reward_batch).to(self.device)
-        mask_batch = torch.FloatTensor(mask_batch).to(self.device)"""
+        mask_batch = torch.FloatTensor(mask_batch).to(self.device)
 
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)

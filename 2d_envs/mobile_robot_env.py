@@ -5,38 +5,64 @@ import numpy as np
 import pygame
 import random
 
+def improved_reward_function(p, p_g, alpha, theta, prev_theta, d, w, steps=None, max_steps=500):
+    """
+    Enhanced reward function for mobile robot navigation with faster learning convergence.
+    
+    Parameters:
+        p: Current position [x, y]
+        p_g: Goal position [x, y]
+        alpha: Robot's orientation angle
+        theta: Angle difference between desired heading and robot orientation
+        prev_theta: Previous theta
+        d: Obstacle length
+        w: Obstacle width
+        steps: Current episode step count
+        max_steps: Maximum steps per episode
+    """
+    reward = 0
+    terminated = False
+    
+    # 1. Forward Progress Reward (dominating component)
+    # Strongly reward moving in positive x direction
+    x_progress = (p[0] + 1) # Transforms [-1,1] to [0,2] range
+    progress_reward = 50 * x_progress
+    
+    # 2. Vertical Position Penalty
+    # Penalize deviation from y=0 (optimal path)
+    y_deviation_penalty = -100 * abs(p[1])
+    
+    # 3. Orientation Bonus
+    # Reward facing towards goal (cos(theta) is 1 when perfectly aligned)
+    orientation_bonus = 20 * (np.cos(theta) + 1)  # Range [0, 40]
+    
+    # Combine continuous rewards
+    reward = progress_reward + y_deviation_penalty + orientation_bonus
+    
+    # Terminal Conditions with large magnitude rewards
+    if np.linalg.norm(p - p_g) <= 0.15:  # Goal reached
+        reward = 2000  # Very large positive reward
+        terminated = True
+        
+    # Obstacle hit - stronger penalty if hit early
+    elif np.abs(p[0]) <= d/2 and np.abs(p[1]) <= w/2:
+        # Penalty gets smaller as x increases (less severe if hit obstacle after making progress)
+        obstacle_penalty = -1000 * (1 - (p[0] + 1)/2)
+        reward = obstacle_penalty
+        terminated = True
+        
+    # Wall hit - similar progressive penalty
+    elif np.abs(p[0]) >= 1 or np.abs(p[1]) >= 1:
+        wall_penalty = -1000 * (1 - (p[0] + 1)/2)
+        reward = wall_penalty
+        terminated = True
+        
+    # Clip reward to maintain stability
+    reward = np.clip(reward, -1000, 2000)
+    
+    return reward, terminated
+
 def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
-        reward = 0
-        terminated = False
-
-        Rd = (1 / (np.linalg.norm(p_g - p) + 1e-4) - 1)*5     # Compute Rd (Distance-based) range 1 / [0.15, 2.2] -1 = [-0.45, 5.6]*5
-        # Rd = np.clip(Rd,-2,15)
-        Ra = np.cos(theta)                                              # Compute Ra (Angle-based reward) range [-1, 1]
-        # Ra = np.clip(Ra,-2,1)
-        Rs = -np.abs(theta - prev_theta) / (2*np.pi)                    # Compute Rs (Sway penalty) [-1, 0]
-        reward += Rd + Ra + Rs                                          # Combine the rewards
-
-        # Penalty for reaching the map limit
-        if np.abs(p[0]) == 1 or np.abs(p[1]) == 1:
-            reward += -100 # -50
-            terminated = True
-            print("WALL COLLISION")
-        
-        # Obstacle collision
-        if np.abs([0]) <= d / 2 and np.abs(p[1]) <= w / 2:
-            reward += -100 # -50
-            terminated = True
-            print("OBASTACLE COLLISION")
-
-        # Goal reached - bonus
-        if np.linalg.norm(p - p_g) <= 0.15:
-            reward += +1000 # +500
-            terminated = True
-            print("TARGET REACHED")
-        
-        return reward, terminated
-
-def reward_function_2(p, p_g, alpha, theta, prev_theta, d, w):
 
     reward = 0
     terminated = False
@@ -110,12 +136,11 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        #pygame.init()
-        #self.screen = pygame.display.set_mode((self.window_size, self.window_size))
-        # self.screen = None
-        #pygame.display.set_caption("Simple Mobile Robot Environment")
-        #self.clock = pygame.time.Clock()
-        #self.font = pygame.font.Font(None, 36)
+        # pygame.init()
+        # self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+        # pygame.display.set_caption("Simple Mobile Robot Environment")
+        # self.clock = pygame.time.Clock()
+        # self.font = pygame.font.Font(None, 36)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
@@ -128,13 +153,50 @@ class MobileRobotEnv(gym.Env):
         """Sets the seed for the environment."""
         self.np_random = np.random.default_rng(seed)
         random.seed(seed)
+    
+    def generate_valid_start(self):
+        """
+        Generate a valid starting position that:
+        1. Is within the map bounds (-1 to 1 for both x and y)
+        2. Avoids the obstacle
+        3. Provides varied starting positions for better exploration
+        """
+        valid = False
+        while not valid:
+            # Generate random position within full map bounds
+            x = random.uniform(-1, 1)  # Changed to use full map width
+            y = random.uniform(-1, 1)
+            
+            # Check if position is valid (not too close to obstacle)
+            p = np.array([x, y])
+            
+            # Check if point is far enough from obstacle
+            obstacle_center = np.array([0, 0])
+            obstacle_distance = np.linalg.norm(p - obstacle_center)
+            min_obstacle_distance = np.sqrt((self.d/2)**2 + (self.w/2)**2) + 0.1  # Add small buffer
+            
+            # Check if point is within map bounds with margin
+            margin = 0.05
+            within_bounds = (x >= -1 + margin and x <= 1 - margin and
+                            y >= -1 + margin and y <= 1 - margin)
+            
+            # Position is valid if it's within bounds and far enough from obstacle
+            if within_bounds and obstacle_distance > min_obstacle_distance:
+                valid = True
+                
+            # Generate random orientation
+            alpha = random.uniform(-np.pi/4, np.pi/4)  # Full range of orientations
+            
+        return p, alpha
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
+        self.p_0, self.alpha_0 = self.generate_valid_start()
+
         # Re-randomize the initial position and angle on every reset
-        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
-        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        #self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        #self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
         self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         # Reset agent location
@@ -151,7 +213,7 @@ class MobileRobotEnv(gym.Env):
 
         return copy.deepcopy(obs)
 
-    def step(self, action):
+    def step(self, action, episode_timesteps):
         # Position of the robot
         prev = copy.deepcopy(self.p)
         prev_theta = copy.deepcopy(self.theta)
@@ -200,7 +262,8 @@ class MobileRobotEnv(gym.Env):
         #     reward += 1
         """
 
-        reward, terminated = reward_function_2(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
+        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
+        # reward, terminated = improved_reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w, episode_timesteps)
 
         info = self._get_info()
 
