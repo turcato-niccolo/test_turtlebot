@@ -50,21 +50,21 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
 if __name__ == "__main__":
 	
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--policy", default="OurDDPG")              # Policy name (TD3, DDPG or OurDDPG)
-	parser.add_argument("--env", default="MR-env")                  # Custom gym environment name
-	parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
-	parser.add_argument("--start_timesteps", default=25e3, type=int)# Time steps initial random policy is used
-	parser.add_argument("--eval_freq", default=5e3, type=int)       # How often (time steps) we evaluate
-	parser.add_argument("--max_timesteps", default=1e6, type=int)   # Max time steps to run environment
-	parser.add_argument("--expl_noise", default=0.5, type=float)    # Std of Gaussian exploration noise
-	parser.add_argument("--batch_size", default=256, type=int)      # Batch size for both actor and critic
-	parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
-	parser.add_argument("--tau", default=0.005, type=float)         # Target network update rate
-	parser.add_argument("--policy_noise", default=0.2)              # Noise added to target policy during critic update
-	parser.add_argument("--noise_clip", default=0.5)                # Range to clip target policy noise
-	parser.add_argument("--policy_freq", default=2, type=int)       # Frequency of delayed policy updates
-	parser.add_argument("--save_model", default=True)        # Save model and optimizer parameters
-	parser.add_argument("--load_model", default="")                 # Model load file name, "" doesn't load, "default" uses file_name
+	parser.add_argument("--policy", default="OurDDPG")              	# Policy name (TD3, DDPG or OurDDPG)
+	parser.add_argument("--env", default="MR-env")                  	# Custom gym environment name
+	parser.add_argument("--seed", default=0, type=int)              	# Sets Gym, PyTorch and Numpy seeds
+	parser.add_argument("--start_timesteps", default=25e3, type=int)	# Time steps initial random policy is used
+	parser.add_argument("--eval_freq", default=5e3, type=int)       	# How often (time steps) we evaluate
+	parser.add_argument("--max_timesteps", default=5*1e5, type=int) 	# Max time steps to run environment
+	parser.add_argument("--expl_noise", default=0.5, type=float)    	# Std of Gaussian exploration noise
+	parser.add_argument("--batch_size", default=256, type=int)      	# Batch size for both actor and critic
+	parser.add_argument("--discount", default=0.99, type=float)     	# Discount factor
+	parser.add_argument("--tau", default=0.005, type=float)         	# Target network update rate
+	parser.add_argument("--policy_noise", default=0.2)              	# Noise added to target policy during critic update
+	parser.add_argument("--noise_clip", default=0.5)                	# Range to clip target policy noise
+	parser.add_argument("--policy_freq", default=2, type=int)       	# Frequency of delayed policy updates
+	parser.add_argument("--save_model", default=True)        			# Save model and optimizer parameters
+	parser.add_argument("--load_model", default="")                 	# Model load file name, "" doesn't load, "default" uses file_name
 	args = parser.parse_args()
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
@@ -128,6 +128,8 @@ if __name__ == "__main__":
 			"lr": 3e-4                            	# Learning rate
 		}
 		policy = SAC.SAC(**kwargs)
+	else:
+		raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
 	if args.load_model != "":
 		policy_file = file_name if args.load_model == "default" else args.load_model
