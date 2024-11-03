@@ -3,17 +3,61 @@ import gym
 from gym import spaces
 import numpy as np
 import pygame
+import random
 
+def reward_function(p, p_g, alpha, theta, prev_theta, d, w, objects):
+
+    reward = 0
+    terminated = False
+
+    # Distance-based reward with obstacle avoidance
+    Rd = 5 * (1 / (np.linalg.norm(p_g - p) + 1e-4) - 1)
+    Rd = np.clip(Rd, -2, 10) # Limit `Rd` to keep rewards stable
+
+    # Angle-based reward
+    # Ra = 0.5 * (np.cos(theta - prev_theta) + 1) # Range [0, 1]
+    Ra = 0.5 * (np.cos(theta) + 1) # Range [0, 1]
+
+    # Sway penalty to reduce erratic movements
+    Rs = -np.square(theta - prev_theta) / (2 * np.pi) # Penalize sharp angle changes
+
+    # Combine the rewards
+    reward = 0.5 * Rd + 0.3 * Ra + 0.2 * Rs - 0.01  # Small penalty per step
+
+    # Wall and obstacle collision penalties
+    if np.abs(p[0]) == 0 or np.abs(p[0]) == 5 or np.abs(p[1]) == 1: # If it hits a boundary
+        reward -= 150
+        terminated = True
+        #print("WALL COLLISION")
+
+    for obj in objects:
+            if np.abs(p[0] - (obj[0]+d/2)) <= d / 2 and np.abs(p[1] - (obj[1]-w/2)) <= w / 2:
+                reward += -50
+                terminated = True
+                #print("OBSTACLE COLLISION")
+
+    # Goal reward
+    if np.linalg.norm(p - p_g) <= 0.15:
+        reward += 1000 # Large reward for success
+        # Provare aggiungendo un reward in base al numero di steps
+        # (e.g 1000 - steps or 1000 + (500 - steps))
+        terminated = True
+        #print("TARGET REACHED")
+
+    # Step penalty to encourage faster goal-reaching
+    reward -= 0.01
+    
+    return reward, terminated
 
 class MobileRobotCorridorEnv(gym.Env):
     def __init__(self):
         super(MobileRobotCorridorEnv, self).__init__()
         self.p_g = np.array([5, 0])
 
-        self.p_0 = np.array([0, 0])
+        self.p_0 = np.array([0, 0]) + np.array([random.uniform(0,0.15),random.uniform(-0.15,0.15)])
         self.p_dot_0 = np.array([0, 0])
         self.alpha_dot_0 = 0
-        self.alpha_0 = 0
+        self.alpha_0 = 0 + random.uniform(-np.pi/4,np.pi/4)
         self.w = 1
         self.d = 0.2
         self.dt = 0.01
@@ -25,6 +69,8 @@ class MobileRobotCorridorEnv(gym.Env):
         self.alpha = copy.deepcopy(self.alpha_0)
         self.alpha_dot = copy.deepcopy(self.alpha_0)
 
+        self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
+
         self._max_episode_steps = 1000
 
         self.observation_space = spaces.Box(np.array([0] + [-1] * 5), np.array([5] + [1] * 5), dtype=np.float32)
@@ -33,30 +79,38 @@ class MobileRobotCorridorEnv(gym.Env):
         self.window_size = (5 * 300, 300)  # The size of the PyGame window
 
         # Initialize PyGame
-        pygame.init()
-        self.screen = pygame.display.set_mode(self.window_size)
-        pygame.display.set_caption("Simple Mobile Robot Environment")
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 36)
+        # pygame.init()
+        # self.screen = pygame.display.set_mode(self.window_size)
+        # pygame.display.set_caption("Simple Mobile Robot Environment")
+        # self.clock = pygame.time.Clock()
+        # self.font = pygame.font.Font(None, 36)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
 
     def _get_info(self):
-        return {"distance": np.linalg.norm(self.p - self.p_g)}
+        #return {"distance": np.linalg.norm(self.p - self.p_g)}
+        return np.linalg.norm(self.p - self.p_g)
     
     def seed(self, seed=None):
         """Sets the seed for the environment."""
         self.np_random = np.random.default_rng(seed)
+        random.seed(seed)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        # Re-randomize the initial position and angle on every reset
+        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         # Reset agent location
         self.p = copy.deepcopy(self.p_0)
         self.p_dot = copy.deepcopy(self.p_dot_0)
         self.alpha = copy.deepcopy(self.alpha_0)
         self.alpha_dot = copy.deepcopy(self.alpha_dot_0)
+        self.theta = copy.deepcopy(self.theta_0)
         obs = np.zeros((6,))
         obs[:2] = self.p
         obs[2] = self.alpha / (2 * np.pi)
@@ -65,52 +119,44 @@ class MobileRobotCorridorEnv(gym.Env):
 
         return copy.deepcopy(obs)
 
-    def step(self, action):
+    def step(self, action, steps):
+        # Position of the robot
         prev = copy.deepcopy(self.p)
+        prev_theta = copy.deepcopy(self.theta)
+        # Velocity of the robot in planar env
         p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
-        self.p = self.p + p_dot * self.dt  # moving max 1 m/s in each direction
+        # Position update
+        self.p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
         self.p_dot = p_dot
 
-        alpha_dot = np.clip(action[1], -1, 1) * self.dt
-        self.alpha = self.alpha + alpha_dot
+        # Angular update
+        alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
+        self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
         self.alpha_dot = alpha_dot
 
+        # Ensure position and orientation are within limits
         self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
-        self.alpha = self.alpha % (2 * np.pi)
+        self.alpha = self.alpha % (2*np.pi)
 
+        # Pointing angle error
+        theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
+        self.theta = theta
+
+        # Set the observation
         obs = np.zeros((6,))
-        obs[0] = self.p[0] / 5
-        obs[1] = self.p[1]
-        obs[2] = self.alpha / (2 * np.pi)
+        obs[:2] = self.p
+        obs[2] = self.alpha / (2*np.pi)
         obs[3:5] = self.p_dot
-        obs[5] = self.alpha_dot
+        obs[5] = self.alpha_dot / 2
 
-        reward = 0
-        terminated = False
+        # REWARD SHAPING
 
-        # shaping
-
-        # Penalty
-        if np.abs(self.p[1]) == 1:
-            reward += -10
-            terminated = True
-
-        reward += self.p[0]**2
-
-        for obj in self.objects:
-            if np.abs(self.p[0] - (obj[0]+self.d/2)) <= self.d / 2 and np.abs(self.p[1] - (obj[1]-self.w/2)) <= self.w / 2:
-                reward += -200
-                terminated = True
-
-        # An episode is done iff the agent has reached the target
-        if np.linalg.norm(self.p - self.p_g) <= 0.05:
-            reward += 1000
-            terminated = True
+        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w, self.objects)
 
         info = self._get_info()
 
-        self.render()  # Call the render method to update the display
+        # self.render()  # Call the render method to update the display
 
         return copy.deepcopy(obs), reward, terminated, info
 

@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
 	
 
-	for t in range(int(args.max_timesteps)):
+	for t in trange(int(args.max_timesteps)):
 		
 		episode_timesteps += 1
 

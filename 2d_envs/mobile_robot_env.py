@@ -5,63 +5,6 @@ import numpy as np
 import pygame
 import random
 
-def improved_reward_function(p, p_g, alpha, theta, prev_theta, d, w, steps=None, max_steps=500):
-    """
-    Enhanced reward function for mobile robot navigation with faster learning convergence.
-    
-    Parameters:
-        p: Current position [x, y]
-        p_g: Goal position [x, y]
-        alpha: Robot's orientation angle
-        theta: Angle difference between desired heading and robot orientation
-        prev_theta: Previous theta
-        d: Obstacle length
-        w: Obstacle width
-        steps: Current episode step count
-        max_steps: Maximum steps per episode
-    """
-    reward = 0
-    terminated = False
-    
-    # 1. Forward Progress Reward (dominating component)
-    # Strongly reward moving in positive x direction
-    x_progress = (p[0] + 1) # Transforms [-1,1] to [0,2] range
-    progress_reward = 50 * x_progress
-    
-    # 2. Vertical Position Penalty
-    # Penalize deviation from y=0 (optimal path)
-    y_deviation_penalty = -100 * abs(p[1])
-    
-    # 3. Orientation Bonus
-    # Reward facing towards goal (cos(theta) is 1 when perfectly aligned)
-    orientation_bonus = 20 * (np.cos(theta) + 1)  # Range [0, 40]
-    
-    # Combine continuous rewards
-    reward = progress_reward + y_deviation_penalty + orientation_bonus
-    
-    # Terminal Conditions with large magnitude rewards
-    if np.linalg.norm(p - p_g) <= 0.15:  # Goal reached
-        reward = 2000  # Very large positive reward
-        terminated = True
-        
-    # Obstacle hit - stronger penalty if hit early
-    elif np.abs(p[0]) <= d/2 and np.abs(p[1]) <= w/2:
-        # Penalty gets smaller as x increases (less severe if hit obstacle after making progress)
-        obstacle_penalty = -1000 * (1 - (p[0] + 1)/2)
-        reward = obstacle_penalty
-        terminated = True
-        
-    # Wall hit - similar progressive penalty
-    elif np.abs(p[0]) >= 1 or np.abs(p[1]) >= 1:
-        wall_penalty = -1000 * (1 - (p[0] + 1)/2)
-        reward = wall_penalty
-        terminated = True
-        
-    # Clip reward to maintain stability
-    reward = np.clip(reward, -1000, 2000)
-    
-    return reward, terminated
-
 def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
 
     reward = 0
@@ -102,8 +45,7 @@ def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
 
     # Step penalty to encourage faster goal-reaching
     reward -= 0.01
-
-
+    
     return reward, terminated
 
 
@@ -263,7 +205,7 @@ class MobileRobotEnv(gym.Env):
         """
 
         reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
-        # reward, terminated = improved_reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w, episode_timesteps)
+        # reward, terminated = improved_reward_function(self.p, self.p_g, prev, self.alpha, self.theta, prev_theta, self.d, self.w, episode_timesteps)
 
         info = self._get_info()
 
