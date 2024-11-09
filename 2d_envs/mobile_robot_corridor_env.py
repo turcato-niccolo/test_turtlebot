@@ -49,6 +49,34 @@ def reward_function(p, p_g, alpha, theta, prev_theta, d, w, objects):
     
     return reward, terminated
 
+def calculate_reward(p, p_g, prev, d, w):
+    reward = 0
+    terminated = False
+
+    # Reward Penalty Based on Distance to Target
+    reward += -0.5*np.linalg.norm(p - p_g) ** 2
+
+    # Reward shaping based on gaussian centered in target position
+    reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
+
+    # Penalty for moving away from the target
+    if np.linalg.norm(p - p_g) >= np.linalg.norm(prev - p_g):
+        reward += -1
+    else:
+        reward += 1
+
+    # Penalty for exceeding the boundary
+    if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2:
+        reward += -100
+        terminated = True
+
+    # Reward for reaching the target
+    if np.linalg.norm(p - p_g) <= 0.05:
+        reward += 1000
+        terminated = True
+
+    return reward, terminated
+
 class MobileRobotCorridorEnv(gym.Env):
     def __init__(self):
         super(MobileRobotCorridorEnv, self).__init__()
@@ -152,7 +180,9 @@ class MobileRobotCorridorEnv(gym.Env):
 
         # REWARD SHAPING
 
-        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w, self.objects)
+        # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w, self.objects)
+
+        reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 

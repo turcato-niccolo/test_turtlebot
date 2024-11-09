@@ -5,6 +5,40 @@ import numpy as np
 import pygame
 import random
 
+def calculate_reward(p, p_g, prev, d, w):
+    reward = 0
+    terminated = False
+
+    # Reward Penalty Based on Distance to Target
+    reward += -0.5*np.linalg.norm(p - p_g) ** 2
+
+    # Reward shaping based on gaussian centered in target position
+    reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
+
+    # Penalty for moving away from the target
+    if np.linalg.norm(p - p_g) >= np.linalg.norm(prev - p_g):
+        reward += -1
+    else:
+        reward += 1
+
+    # Penalty for hitting the obstacle
+    if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2:
+        reward += -100
+        terminated = True
+    
+    '''
+    if np.abs(p[0]) == 1 or np.abs(p[1]) == 1: # If it hits a boundary
+        reward -= 100 # -100
+        terminated = True
+    '''
+    
+    # Reward for reaching the target
+    if np.linalg.norm(p - p_g) <= 0.15:
+        reward += 1000
+        terminated = True
+
+    return reward, terminated
+
 def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
 
     reward = 0
@@ -78,11 +112,11 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        # pygame.init()
-        # self.screen = pygame.display.set_mode((self.window_size, self.window_size))
-        # pygame.display.set_caption("Simple Mobile Robot Environment")
-        # self.clock = pygame.time.Clock()
-        # self.font = pygame.font.Font(None, 36)
+        #pygame.init()
+        #self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+        #pygame.display.set_caption("Simple Mobile Robot Environment")
+        #self.clock = pygame.time.Clock()
+        #self.font = pygame.font.Font(None, 36)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
@@ -134,11 +168,12 @@ class MobileRobotEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self.p_0, self.alpha_0 = self.generate_valid_start()
+        # Randomize the initial position and angle (whole map)
+        # self.p_0, self.alpha_0 = self.generate_valid_start()
 
-        # Re-randomize the initial position and angle on every reset
-        #self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
-        #self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        # Re-randomize the initial position and angle on every reset (near the left side)
+        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
         self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         # Reset agent location
@@ -204,8 +239,10 @@ class MobileRobotEnv(gym.Env):
         #     reward += 1
         """
 
-        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
+        # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
         # reward, terminated = improved_reward_function(self.p, self.p_g, prev, self.alpha, self.theta, prev_theta, self.d, self.w, episode_timesteps)
+
+        reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 
