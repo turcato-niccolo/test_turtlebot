@@ -59,10 +59,12 @@ def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
     reward = 0.5 * Rd + 0.3 * Ra + 0.2 * Rs - 0.01  # Small penalty per step
 
     # Wall and obstacle collision penalties
+    '''
     if np.abs(p[0]) == 1 or np.abs(p[1]) == 1: # If it hits a boundary
         reward -= 150
         terminated = True
         #print("WALL COLLISION")
+    '''
 
     if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2: # If it hits the obstacle
         reward -= 50
@@ -112,11 +114,12 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        #pygame.init()
-        #self.screen = pygame.display.set_mode((self.window_size, self.window_size))
-        #pygame.display.set_caption("Simple Mobile Robot Environment")
-        #self.clock = pygame.time.Clock()
-        #self.font = pygame.font.Font(None, 36)
+        if not True:
+            pygame.init()
+            self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+            pygame.display.set_caption("Simple Mobile Robot Environment")
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.Font(None, 36)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
@@ -240,7 +243,6 @@ class MobileRobotEnv(gym.Env):
         """
 
         # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
-        # reward, terminated = improved_reward_function(self.p, self.p_g, prev, self.alpha, self.theta, prev_theta, self.d, self.w, episode_timesteps)
 
         reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
 
