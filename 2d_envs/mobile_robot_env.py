@@ -108,8 +108,16 @@ class MobileRobotEnv(gym.Env):
 
         self._max_episode_steps = 500
 
-        self.observation_space = spaces.Box(np.array([-1]*6), np.array([1]*6), dtype=np.float32)
-        self.action_space = spaces.Box(np.array([-1, -1]), np.array([1, 1]), dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=np.array([-1] * 6, dtype=np.float32),
+            high=np.array([1] * 6, dtype=np.float32),
+            dtype=np.float32
+        )
+        self.action_space = spaces.Box(
+            low=np.array([-1, -1], dtype=np.float32),
+            high=np.array([1, 1], dtype=np.float32),
+            dtype=np.float32
+        )
 
         self.window_size = 512  # The size of the PyGame window
 
