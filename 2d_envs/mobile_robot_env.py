@@ -228,23 +228,10 @@ class MobileRobotEnv(gym.Env):
         terminated = False
 
         # REWARD SHAPING
-        """
-        # Reward Penalty Based on Distance to Target
-        reward += -0.5*np.linalg.norm(self.p - self.p_g) ** 2
 
-        # Reward based on exponenetial decay (Gaussian centered in the target)
-        reward += 2 * np.exp(-(np.linalg.norm(self.p - self.p_g))**2)
+        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
 
-        # Penality for moving away from target
-        if np.linalg.norm(self.p - self.p_g) >= np.linalg.norm(prev - self.p_g):
-            reward += -1
-        # else:
-        #     reward += 1
-        """
-
-        # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
-
-        reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
+        # reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 
