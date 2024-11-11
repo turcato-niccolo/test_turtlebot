@@ -207,7 +207,7 @@ class MobileRobotEnv(gym.Env):
 
         return copy.deepcopy(obs)
 
-    def step(self, action, episode_timesteps):
+    def step(self, action, episode_timesteps=500):
         # Position of the robot
         prev = copy.deepcopy(self.p)
         prev_theta = copy.deepcopy(self.theta)
@@ -220,10 +220,12 @@ class MobileRobotEnv(gym.Env):
         if is_within_bounds(next_p):
             self.p = next_p
             self.p_dot = p_dot
-        else:
-            # If the next position is not within bounds, keep the robot's position unchanged
-            self.p = prev
-            self.p_dot = np.zeros_like(p_dot)
+            alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt
+            self.alpha = self.alpha + alpha_dot
+            self.alpha_dot = alpha_dot
+
+            self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
+            self.alpha = self.alpha % (2*np.pi)
 
         # Set the observation
         obs = np.zeros((6,))
@@ -237,9 +239,9 @@ class MobileRobotEnv(gym.Env):
 
         # REWARD SHAPING
 
-        reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
+        # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
 
-        # reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
+        reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 
