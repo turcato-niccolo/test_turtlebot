@@ -10,10 +10,10 @@ def calculate_reward(p, p_g, prev, d, w):
     terminated = False
 
     # Reward Penalty Based on Distance to Target
-    reward += -0.5*np.linalg.norm(p - p_g) ** 2
+    #reward += -0.5*np.linalg.norm(p - p_g) ** 2
 
     # Reward shaping based on gaussian centered in target position
-    reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
+    #reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
 
     # Penalty for moving away from the target
     if np.linalg.norm(p - p_g) >= np.linalg.norm(prev - p_g):
@@ -127,7 +127,7 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        if True:
+        if not True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
             pygame.display.set_caption("Simple Mobile Robot Environment")
