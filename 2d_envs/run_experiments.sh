@@ -7,7 +7,7 @@ do
     #python3 main.py \
     #--policy "OurDDPG" \
     #--env "MR-env" \
-    #--seed $i &
+    #--seed $i
 
     #python3 main.py \
     #--policy "OurDDPG" \
@@ -17,7 +17,7 @@ do
     python3 main.py \
     --policy "ExpD3" \
     --env "MR-env" \
-    --seed $i
+    --seed $i &
 
     #python3 main.py \
     #--policy "ExpD3" \
