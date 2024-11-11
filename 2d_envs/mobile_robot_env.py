@@ -84,6 +84,11 @@ def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
     
     return reward, terminated
 
+def is_within_bounds(p):
+        # Check if the x and y components of self.p are within the map limits
+        x= p[0]
+        y= p[1]
+        return -1.0 < x < 1.0 and -1.0 < y < 1.0
 
 
 class MobileRobotEnv(gym.Env):
@@ -122,7 +127,7 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        if not True:
+        if True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
             pygame.display.set_caption("Simple Mobile Robot Environment")
@@ -175,21 +180,16 @@ class MobileRobotEnv(gym.Env):
             alpha = random.uniform(-np.pi/4, np.pi/4)  # Full range of orientations
             
         return p, alpha
-    
-    def is_within_bounds(self):
-        # Check if the x and y components of self.p are within the map limits
-        x, y = self.p
-        return -1 <= x <= 1 and -1 <= y <= 1
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
         # Randomize the initial position and angle (whole map)
-        self.p_0, self.alpha_0 = self.generate_valid_start()
+        #self.p_0, self.alpha_0 = self.generate_valid_start()
 
         # Re-randomize the initial position and angle on every reset (near the left side)
-        #self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
-        #self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
         
         self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
@@ -217,22 +217,13 @@ class MobileRobotEnv(gym.Env):
         # Position update
         next_p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
 
-        if is_within_bounds(self.p):
+        if is_within_bounds(next_p):
             self.p = next_p
             self.p_dot = p_dot
-
-            # Angular update
-            alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
-            self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
-            self.alpha_dot = alpha_dot
-
-            # Ensure position and orientation are within limits
-            self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
-            self.alpha = self.alpha % (2*np.pi)
-
-        # Pointing angle error
-        theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
-        self.theta = theta
+        else:
+            # If the next position is not within bounds, keep the robot's position unchanged
+            self.p = prev
+            self.p_dot = np.zeros_like(p_dot)
 
         # Set the observation
         obs = np.zeros((6,))
@@ -336,7 +327,7 @@ if __name__ == '__main__':
 
     while steps <= 1e4:
         action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
+        obs, reward, done, info = env.step(action, episode_timesteps=steps)
         steps += 1
         env.render()
     env.close()
