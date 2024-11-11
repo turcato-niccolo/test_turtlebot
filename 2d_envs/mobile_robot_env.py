@@ -5,7 +5,7 @@ import numpy as np
 import pygame
 import random
 
-def calculate_reward(p, p_g, prev, d, w):
+def reward_2(p, p_g, prev, d, w):
     reward = 0
     terminated = False
 
@@ -39,7 +39,7 @@ def calculate_reward(p, p_g, prev, d, w):
 
     return reward, terminated
 
-def reward_function(p, p_g, alpha, theta, prev_theta, d, w):
+def reward_1(p, p_g, alpha, theta, prev_theta, d, w):
 
     reward = 0
     terminated = False
@@ -127,7 +127,7 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        if not True:
+        if True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
             pygame.display.set_caption("Simple Mobile Robot Environment")
@@ -218,14 +218,22 @@ class MobileRobotEnv(gym.Env):
         next_p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
 
         if is_within_bounds(next_p):
+            # Position update
             self.p = next_p
             self.p_dot = p_dot
-            alpha_dot = 2 * np.clip(action[1], -1, 1) * self.dt
-            self.alpha = self.alpha + alpha_dot
+
+            # Angular update
+            alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
+            self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
             self.alpha_dot = alpha_dot
 
+            # Ensure position and orientation are within limits
             self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
             self.alpha = self.alpha % (2*np.pi)
+
+            # Pointing angle error
+            theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
+            self.theta = theta
 
         # Set the observation
         obs = np.zeros((6,))
@@ -239,9 +247,9 @@ class MobileRobotEnv(gym.Env):
 
         # REWARD SHAPING
 
-        # reward, terminated = reward_function(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
+        reward, terminated = reward_1(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
 
-        reward, terminated = calculate_reward(self.p, self.p_g, prev, self.d, self.w)
+        #reward, terminated = reward_2(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 
