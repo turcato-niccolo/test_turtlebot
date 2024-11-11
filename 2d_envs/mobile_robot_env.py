@@ -175,6 +175,11 @@ class MobileRobotEnv(gym.Env):
             alpha = random.uniform(-np.pi/4, np.pi/4)  # Full range of orientations
             
         return p, alpha
+    
+    def is_within_bounds(self):
+        # Check if the x and y components of self.p are within the map limits
+        x, y = self.p
+        return -1 <= x <= 1 and -1 <= y <= 1
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -210,17 +215,20 @@ class MobileRobotEnv(gym.Env):
         p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
         # Position update
-        self.p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
-        self.p_dot = p_dot
+        next_p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
 
-        # Angular update
-        alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
-        self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
-        self.alpha_dot = alpha_dot
+        if is_within_bounds(self.p):
+            self.p = next_p
+            self.p_dot = p_dot
 
-        # Ensure position and orientation are within limits
-        self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
-        self.alpha = self.alpha % (2*np.pi)
+            # Angular update
+            alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
+            self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
+            self.alpha_dot = alpha_dot
+
+            # Ensure position and orientation are within limits
+            self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
+            self.alpha = self.alpha % (2*np.pi)
 
         # Pointing angle error
         theta = np.arctan2(self.p_g[1] - self.p[1], self.p_g[0] - self.p[0]) - self.alpha
