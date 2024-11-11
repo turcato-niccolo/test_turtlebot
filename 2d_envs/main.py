@@ -71,9 +71,9 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
-	#print("---------------------------------------")
-	#print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
-	#print("---------------------------------------")
+	print("---------------------------------------")
+	print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
+	print("---------------------------------------")
 
 	if not os.path.exists("./results"):
 		os.makedirs("./results")

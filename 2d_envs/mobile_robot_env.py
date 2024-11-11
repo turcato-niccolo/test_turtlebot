@@ -180,11 +180,12 @@ class MobileRobotEnv(gym.Env):
         super().reset(seed=seed)
 
         # Randomize the initial position and angle (whole map)
-        # self.p_0, self.alpha_0 = self.generate_valid_start()
+        self.p_0, self.alpha_0 = self.generate_valid_start()
 
         # Re-randomize the initial position and angle on every reset (near the left side)
-        self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
-        self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        #self.p_0 = np.array([-1, 0]) + np.array([random.uniform(0,0.15), random.uniform(-0.15, 0.15)])
+        #self.alpha_0 = 0 + random.uniform(-np.pi/4, np.pi/4)
+        
         self.theta_0 = np.arctan2(self.p_g[1] - self.p_0[1], self.p_g[0] - self.p_0[0]) - self.alpha_0
 
         # Reset agent location
