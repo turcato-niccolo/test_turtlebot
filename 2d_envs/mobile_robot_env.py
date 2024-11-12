@@ -10,10 +10,10 @@ def reward_2(p, p_g, prev, d, w):
     terminated = False
 
     # Reward Penalty Based on Distance to Target
-    #reward += -0.5*np.linalg.norm(p - p_g) ** 2
+    reward += -0.5*np.linalg.norm(p - p_g) ** 2
 
     # Reward shaping based on gaussian centered in target position
-    #reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
+    reward += 2 * np.exp(-(np.linalg.norm(p - p_g))**2)
 
     # Penalty for moving away from the target
     if np.linalg.norm(p - p_g) >= np.linalg.norm(prev - p_g):
@@ -69,7 +69,6 @@ def reward_1(p, p_g, alpha, theta, prev_theta, d, w):
     if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2: # If it hits the obstacle
         reward -= 50
         terminated = True
-        #print("OBSTACLE COLLISION")
 
     # Goal reward
     if np.linalg.norm(p - p_g) <= 0.15:
@@ -77,7 +76,6 @@ def reward_1(p, p_g, alpha, theta, prev_theta, d, w):
         # Provare aggiungendo un reward in base al numero di steps
         # (e.g 1000 - steps or 1000 + (500 - steps))
         terminated = True
-        #print("TARGET REACHED")
 
     # Step penalty to encourage faster goal-reaching
     reward -= 0.01
@@ -127,7 +125,7 @@ class MobileRobotEnv(gym.Env):
         self.window_size = 512  # The size of the PyGame window
 
         # Initialize PyGame
-        if True:
+        if not True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
             pygame.display.set_caption("Simple Mobile Robot Environment")
@@ -248,7 +246,7 @@ class MobileRobotEnv(gym.Env):
         # REWARD SHAPING
 
         reward, terminated = reward_1(self.p, self.p_g, self.alpha, self.theta, prev_theta, self.d, self.w)
-
+        
         #reward, terminated = reward_2(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
