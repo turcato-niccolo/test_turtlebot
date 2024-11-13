@@ -27,9 +27,10 @@ class SAC(object):
         self.target_update_interval = target_update_interval
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
+        # Check for cuda device
         # self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
 
-        # Cjeck for device
+        # Check for apple metal device
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")  # Use MPS on supported Macs
         else:
@@ -71,6 +72,7 @@ class SAC(object):
         # Sample a batch from memory
         state_batch, action_batch, next_state_batch, reward_batch, mask_batch = memory.sample(batch_size=batch_size)
 
+        # Convert to tensor and move to device
         state_batch = torch.FloatTensor(state_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
