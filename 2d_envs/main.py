@@ -71,9 +71,6 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
-	print("---------------------------------------")
-	print(f"Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
-	print("---------------------------------------")
 
 	if not os.path.exists("./results"):
 		os.makedirs("./results")
@@ -160,6 +157,10 @@ if __name__ == "__main__":
 	episode_timesteps = 0
 	episode_num = 0
 	target_reached = 0
+
+	print("----------------------------------------------------------")
+	print(f"Policy: {args.policy}, Freq: {1/comput_freq} Hz, Env: {args.env}, Seed: {args.seed}")
+	print("----------------------------------------------------------")
 
 	# Training loop
 	for t in trange(int(args.max_timesteps)):
