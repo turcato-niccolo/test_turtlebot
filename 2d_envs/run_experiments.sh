@@ -14,14 +14,14 @@ do
     #--env "MR-env" \
     #--seed $i &
 
-    python3 main.py \
-    --policy "TD3" \
-    --env "MR-env" \
-    --seed $i &
-
     #python3 main.py \
-    #--policy "SAC" \
+    #--policy "TD3" \
     #--env "MR-env" \
     #--seed $i &
+
+    python3 main.py \
+    --policy "SAC" \
+    --env "MR-env" \
+    --seed $i &
 
 done

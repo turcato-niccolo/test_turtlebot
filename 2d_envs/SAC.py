@@ -28,13 +28,14 @@ class SAC(object):
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
         # Check for cuda device
-        # self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
-
+        self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+        '''
         # Check for apple metal device
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")  # Use MPS on supported Macs
         else:
             self.device = torch.device("cpu")  # Fallback to CPU
+        '''
 
         self.critic = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(device=self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr)
@@ -71,14 +72,14 @@ class SAC(object):
         self.updates += 1
         # Sample a batch from memory
         state_batch, action_batch, next_state_batch, reward_batch, mask_batch = memory.sample(batch_size=batch_size)
-
+        '''
         # Convert to tensor and move to device
         state_batch = torch.FloatTensor(state_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
         reward_batch = torch.FloatTensor(reward_batch).to(self.device)
         mask_batch = torch.FloatTensor(mask_batch).to(self.device)
-
+        '''
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
@@ -269,7 +270,7 @@ class DeterministicPolicy(nn.Module):
 
     def sample(self, state):
         mean = self.forward(state)
-        noise = self.noise.normal_(0., std=0.1)
+        noise = self.noise.normal_(0., std=0.3)
         noise = noise.clamp(-0.25, 0.25)
         action = mean + noise
         return action, torch.tensor(0.), mean
