@@ -15,7 +15,7 @@ import mobile_robot_env as M
 import mobile_robot_corridor_env as MC
 
 
-def eval_policy(policy, env_name, seed, eval_episodes=10, evaluate=False):
+def eval_policy(policy, env_name, seed, eval_episodes=10, evaluate=False, freq=1/10):
 
 	if env_name == "MR-env":
 		eval_env = M.MobileRobotEnv()
@@ -36,7 +36,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10, evaluate=False):
 				action = policy.select_action(np.array(state))
 			else:
 				action = policy.select_action(np.array(state), evaluate)
-			state, reward, done, info = eval_env.step(action, steps)
+			state, reward, done, info = eval_env.step(action, steps, freq)
 			avg_reward += reward
 			steps += 1
 
@@ -105,7 +105,9 @@ if __name__ == "__main__":
 		"discount": args.discount,
 		"tau": args.tau,
 	}
+
 	evaluate = False
+	comput_freq = 0
 
 	# Initialize policy
 	if args.policy == "TD3":
@@ -113,12 +115,16 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
+		comput_freq = 1/15 # 15Hz
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
+		comput_freq = 1/10 # 10Hz
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
+		comput_freq = 1/15 # 15Hz
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
+		comput_freq = 1/2 # 2Hz
 		kwargs = {
 			"num_inputs": state_dim,             	# The state dimension
 			"action_space": env.action_space,     	# The action space object
@@ -135,30 +141,33 @@ if __name__ == "__main__":
 		evaluate = True
 	else:
 		raise NotImplementedError("Policy {} not implemented".format(args.policy))
-
+	
+	# Load model
 	if args.load_model != "":
 		policy_file = file_name if args.load_model == "default" else args.load_model
 		policy.load(f"./models/{policy_file}")
-
+	
+	# Initialize replay buffer
 	replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
 	
 	# Evaluate untrained policy
-	evaluation , success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate)
+	evaluation , success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate, freq=comput_freq)
 	evaluations , successes = [evaluation], [success]
 
+	# Initialize metrics
 	state, done = env.reset(), False
 	episode_reward = 0
 	episode_timesteps = 0
 	episode_num = 0
 	target_reached = 0
 
-	
-
+	# Training loop
 	for t in trange(int(args.max_timesteps)):
 		
+		# Update episode timestep
 		episode_timesteps += 1
 
-		# Select action randomly or according to policy
+		# Select action randomly or according to policy 
 		if t < args.start_timesteps:
 			action = env.action_space.sample()
 		elif  args.policy != "SAC":
@@ -170,11 +179,12 @@ if __name__ == "__main__":
 			action = policy.select_action(np.array(state))
 
 		# Perform action
-		next_state, reward, done, info = env.step(action, episode_timesteps)
+		next_state, reward, done, info = env.step(action, episode_timesteps, comput_freq)
 
 		# Store data in replay buffer
 		replay_buffer.add(state, action, next_state, reward, done)
 
+		# Store state and reward
 		state = next_state
 		episode_reward += reward
 		# env.render()
@@ -182,10 +192,11 @@ if __name__ == "__main__":
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
 			policy.train(replay_buffer, args.batch_size*2)
-
+		
+		# End of episode handling
 		done = True if episode_timesteps >= env._max_episode_steps else done
 
-
+		# Reset episode
 		if done: 
 			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
 			#print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
@@ -200,7 +211,7 @@ if __name__ == "__main__":
 
 		# Evaluate episode
 		if (t + 1) % args.eval_freq == 0:
-			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate)
+			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate, freq=comput_freq)
 			evaluations.append(evaluation)
 			successes.append(success)
 			np.save(f"./results/{file_name}", evaluations)
@@ -210,5 +221,6 @@ if __name__ == "__main__":
 			#print("---------------------------------------------------------------------")
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
 			#print("---------------------------------------------------------------------")
-		
+
+		# Save final policy if successful
 		if success == 10: policy.save(f"./models/{file_name}")

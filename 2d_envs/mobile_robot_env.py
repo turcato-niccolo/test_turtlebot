@@ -4,6 +4,7 @@ from gym import spaces
 import numpy as np
 import pygame
 import random
+import robot_dynamic as rd
 
 def reward_1(p, p_g, alpha, theta, prev_theta, d, w):
 
@@ -122,15 +123,31 @@ class MobileRobotEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.window_size = 512  # The size of the PyGame window
+        # Enhanced visualization settings
+        self.window_size = 700  # Increased window size
+        self.background_color = (240, 240, 245)  # Light gray-blue background
+        self.grid_color = (200, 200, 200)  # Light gray grid
+        self.grid_spacing = 50  # Grid cell size in pixels
+        
+        # Colors
+        self.robot_color = (30, 144, 255)  # Dodger blue
+        self.robot_outline = (0, 0, 102)   # Dark blue
+        self.target_color = (255, 69, 0, 180)  # Red-orange with transparency
+        self.obstacle_color = (70, 70, 70, 100)  # Dark gray with transparency
+        self.spawn_area_color = (144, 238, 144, 80)  # Light green with transparency
+        
+        # Trail settings
+        self.trail_length = 50
+        self.trail_points = []
+        self.trail_color = (135, 206, 235, 100)  # Sky blue with transparency
 
         # Initialize PyGame
         if not True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
-            pygame.display.set_caption("Simple Mobile Robot Environment")
+            pygame.display.set_caption("Mobile Robot Navigation Environment")
             self.clock = pygame.time.Clock()
-            self.font = pygame.font.Font(None, 36)
+            self.font = pygame.font.SysFont('Arial', 24)
 
     def _get_obs(self):
         return {"agent": self.p, "target": self.p_g}
@@ -205,25 +222,28 @@ class MobileRobotEnv(gym.Env):
 
         return copy.deepcopy(obs)
 
-    def step(self, action, episode_timesteps=500):
+    def step(self, action, episode_timesteps=500, dt=0.1):
         # Position of the robot
         prev = copy.deepcopy(self.p)
         prev_theta = copy.deepcopy(self.theta)
-        # Velocity of the robot in planar env
-        p_dot = np.clip(action[0], -1, 1) * np.array([np.cos(self.alpha), np.sin(self.alpha)])
 
-        # Position update
-        next_p = self.p + p_dot * self.dt   # moving max 1 m/s in each direction
+        # Simulate the robot's trajectory based on velocity commands
+        v = np.clip(action[0], -1, 1)                                   # linear velocity
+        omega = 2 * np.clip(action[1], -1, 1)                           # angular velocity
+        initial_state = [self.p[0], self.p[1], self.alpha]              # initial state
+
+        # Simulate the robot's motion
+        x, y, angle = rd.simulate_robot(v, omega, initial_state, dt)
+        next_p = np.array([x, y])
 
         if is_within_bounds(next_p):
             # Position update
             self.p = next_p
-            self.p_dot = p_dot
+            self.p_dot = v * np.array(np.cos(self.alpha), np.sin(self.alpha))
 
             # Angular update
-            alpha_dot = 2 * np.clip(action[1], -1, 1) # angular velocity
-            self.alpha = self.alpha + alpha_dot * self.dt # new robot angle
-            self.alpha_dot = alpha_dot
+            self.alpha = angle
+            self.alpha_dot = omega
 
             # Ensure position and orientation are within limits
             self.p = np.clip(self.p, self.observation_space.low[:2], self.observation_space.high[:2])
@@ -259,64 +279,122 @@ class MobileRobotEnv(gym.Env):
         if self.screen is None:
             return
 
-        # Fill screen with white background
-        self.screen.fill((255, 255, 255))
-
-        # Calculate agent position and rotation
-        agent_pos = self._to_screen_coordinates(self.p)
-        R = np.array([[np.cos(self.alpha), -np.sin(self.alpha)],
-                    [np.sin(self.alpha), np.cos(self.alpha)]])
+        # Fill background
+        self.screen.fill(self.background_color)
         
-        # Draw agent as a triangle to show orientation
-        front = self._to_screen_coordinates(self.p + np.dot(R, np.array([0.07, 0])))  # Pointy front end
-        back_left = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, 0.03])))
-        back_right = self._to_screen_coordinates(self.p + np.dot(R, np.array([-0.05, -0.03])))
-        pygame.draw.polygon(self.screen, (0, 0, 255), [front, back_left, back_right])  # Solid triangle
-        pygame.draw.polygon(self.screen, (0, 0, 0), [front, back_left, back_right], 2)  # Outline
+        # Draw grid
+        for x in range(0, self.window_size, self.grid_spacing):
+            pygame.draw.line(self.screen, self.grid_color, (x, 0), (x, self.window_size))
+        for y in range(0, self.window_size, self.grid_spacing):
+            pygame.draw.line(self.screen, self.grid_color, (0, y), (self.window_size, y))
         
-        # Draw the target as a filled red circle with transparency
-        target_pos = self._to_screen_coordinates(self.p_g)
-        target_radius = 20
-        target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(target_surface, (255, 0, 0, 100), (target_radius, target_radius), target_radius)  # Semi-transparent fill
-        pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)    # Solid border
-        self.screen.blit(target_surface, (target_pos[0] - target_radius, target_pos[1] - target_radius))
+        # Update and draw trail
+        if len(self.trail_points) >= self.trail_length:
+            self.trail_points.pop(0)
+        self.trail_points.append(self._to_screen_coordinates(self.p))
 
-        # Draw penalty area with semi-transparent fill
-        penalty_area_top_left = self._to_screen_coordinates(np.array([-self.d / 2, self.w / 2]))
-        # penalty_area_top_right = self._to_screen_coordinates(np.array([self.d / 2, self.w / 2]))
-        penalty_area_bottom_right = self._to_screen_coordinates(np.array([self.d / 2, -self.w / 2]))
-        penalty_area_bottom_left = self._to_screen_coordinates(np.array([-self.d / 2, -self.w / 2]))
-
-        # Draw penalty area border and filled rectangle
-        width = penalty_area_bottom_right[0] - penalty_area_bottom_left[0]
-        height = penalty_area_bottom_left[1] - penalty_area_top_left[1]
-        pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(
-            penalty_area_top_left[0], penalty_area_top_left[1], width, height), 2)  # Border
-        penalty_area_surface = pygame.Surface((width, height), pygame.SRCALPHA)  # Transparent surface
-        penalty_area_surface.fill((0, 0, 0, 50))  # Semi-transparent fill
-        self.screen.blit(penalty_area_surface, penalty_area_top_left)
-
-        # Draw possible spawn area as a semi-transparent green box
+        if len(self.trail_points) > 1:
+            trail_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
+            pygame.draw.lines(trail_surface, self.trail_color, False, self.trail_points, 3)
+            self.screen.blit(trail_surface, (0, 0))
+        
+        # Draw obstacle
+        penalty_area_top_left = self._to_screen_coordinates(np.array([-self.d/2, self.w/2]))
+        penalty_area_bottom_right = self._to_screen_coordinates(np.array([self.d/2, -self.w/2]))
+        
+        width = penalty_area_bottom_right[0] - penalty_area_top_left[0]
+        height = penalty_area_bottom_right[1] - penalty_area_top_left[1]
+        
+        # Create surface for semi-transparent obstacle
+        obstacle_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        pygame.draw.rect(obstacle_surface, self.obstacle_color, (0, 0, width, height))
+        pygame.draw.rect(obstacle_surface, (0, 0, 0), (0, 0, width, height), 2)
+        
+        # Add striped pattern
+        stripe_spacing = 20
+        for i in range(0, width + height, stripe_spacing):
+            start_pos = (i, 0)
+            end_pos = (0, i)
+            pygame.draw.line(obstacle_surface, (0, 0, 0, 30), start_pos, end_pos, 2)
+            
+        self.screen.blit(obstacle_surface, penalty_area_top_left)
+        
+        # Draw spawn area
         spawn_area_top_left = self._to_screen_coordinates(np.array([-1, 0.15]))
         spawn_area_bottom_right = self._to_screen_coordinates(np.array([-0.85, -0.15]))
-        spawn_width = spawn_area_bottom_right[0] - spawn_area_top_left[0]
-        spawn_height = spawn_area_bottom_right[1] - spawn_area_top_left[1]
-        spawn_area_surface = pygame.Surface((spawn_width, spawn_height), pygame.SRCALPHA)  # Transparent surface
-        spawn_area_surface.fill((0, 255, 0, 50))  # Semi-transparent green fill
-        pygame.draw.rect(spawn_area_surface, (0, 255, 0), pygame.Rect(0, 0, spawn_width, spawn_height), 2)  # Solid border
-        self.screen.blit(spawn_area_surface, spawn_area_top_left)
+        
+        width = spawn_area_bottom_right[0] - spawn_area_top_left[0]
+        height = spawn_area_bottom_right[1] - spawn_area_top_left[1]
+        
+        spawn_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        pygame.draw.rect(spawn_surface, self.spawn_area_color, (0, 0, width, height))
+        pygame.draw.rect(spawn_surface, (0, 100, 0), (0, 0, width, height), 2)
+        
+        # Add dotted pattern
+        dot_spacing = 10
+        for x in range(0, width, dot_spacing):
+            for y in range(0, height, dot_spacing):
+                pygame.draw.circle(spawn_surface, (0, 100, 0, 50), (x, y), 1)
+                
+        self.screen.blit(spawn_surface, spawn_area_top_left)
 
-        # Update the display
+        # Draw target
+        target_pos = self._to_screen_coordinates(self.p_g)
+        target_radius = 25
+        
+        # Outer glow effect
+        for r in range(target_radius + 10, target_radius - 1, -2):
+            alpha = int(100 * (1 - (r - target_radius) / 10))
+            target_surface = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(target_surface, (*self.target_color[:3], alpha), (r, r), r)
+            self.screen.blit(target_surface, (target_pos[0] - r, target_pos[1] - r))
+        
+        # Main target circle
+        target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(target_surface, self.target_color, (target_radius, target_radius), target_radius)
+        pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)
+        self.screen.blit(target_surface, (target_pos[0] - target_radius, target_pos[1] - target_radius))
+        
+        # Draw robot
+        R = np.array([[np.cos(self.alpha), -np.sin(self.alpha)],
+                     [np.sin(self.alpha), np.cos(self.alpha)]])
+        
+        robot_size = 0.08
+        points = [
+            self.p + np.dot(R, np.array([robot_size, 0])),  # Front
+            self.p + np.dot(R, np.array([-robot_size/2, robot_size/2])),  # Back left
+            self.p + np.dot(R, np.array([-robot_size/2, -robot_size/2]))  # Back right
+        ]
+        
+        screen_points = [self._to_screen_coordinates(p) for p in points]
+        
+        # Draw robot body
+        pygame.draw.polygon(self.screen, self.robot_color, screen_points)
+        pygame.draw.polygon(self.screen, self.robot_outline, screen_points, 2)
+        
+        # Draw direction indicator
+        front_center = self._to_screen_coordinates(self.p + np.dot(R, np.array([robot_size*1.2, 0])))
+        center = self._to_screen_coordinates(self.p)
+        pygame.draw.line(self.screen, self.robot_outline, center, front_center, 2)
+        
+        # Draw info overlay
+        info_surface = pygame.Surface((200, 100), pygame.SRCALPHA)
+        text_color = (50, 50, 50)
+        
+        # Display position and orientation
+        pos_text = self.font.render(f'x: {self.p[0]:.2f} y: {self.p[1]:.2f}', True, text_color)
+        angle_text = self.font.render(f'α: {np.degrees(self.alpha):.1f}°', True, text_color)
+        
+        info_surface.blit(pos_text, (10, 10))
+        info_surface.blit(angle_text, (10, 40))
+        
+        self.screen.blit(info_surface, (10, 10))
+
         pygame.display.flip()
-        self.clock.tick(200)
+        self.clock.tick(60)
 
     def _to_screen_coordinates(self, pos):
-        """
-        Convert position in environment coordinates to screen coordinates.
-        Environment coordinates range from -1 to 1.
-        Screen coordinates range from 0 to window_size.
-        """
+        """Convert environment coordinates to screen coordinates"""
         return (
             int((pos[0] + 1) / 2 * self.window_size),
             int((1 - (pos[1] + 1) / 2) * self.window_size)
@@ -334,9 +412,13 @@ if __name__ == '__main__':
     done = False
     steps = 0
 
+    print("Starting simulation...")
+
     while steps <= 1e4:
         action = env.action_space.sample()
-        obs, reward, done, info = env.step(action, episode_timesteps=steps)
+        obs, reward, done, info = env.step(action, episode_timesteps=steps, dt=0.1)
         steps += 1
         env.render()
     env.close()
+
+    print("Simulation finished.")
