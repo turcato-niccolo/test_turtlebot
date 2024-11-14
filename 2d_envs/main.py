@@ -136,6 +136,7 @@ if __name__ == "__main__":
 		}
 		policy = SAC.SAC(**kwargs)
 		evaluate = True
+		expl_noise=0
 	else:
 		raise NotImplementedError("Policy {} not implemented".format(args.policy))
 	
@@ -177,7 +178,7 @@ if __name__ == "__main__":
 			+ np.random.normal(0, max_action * args.expl_noise, size=action_dim)
 			).clip(-max_action, max_action)
 		else:
-			action = policy.select_action(np.array(state))
+			action = policy.select_action(np.array(state)).clip(-max_action, max_action)
 
 		# Perform action
 		next_state, reward, done, info = env.step(action, episode_timesteps, comput_freq)
