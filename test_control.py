@@ -29,7 +29,7 @@ class RobotTrainer:
         self.TRAINING_START_SIZE = 10**3
         
         # Environment parameters
-        self.GOAL = np.array([1.0, 0.0])  # Convert to numpy array for faster computation
+        self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
         self.GOAL_DIST = 0.15
@@ -78,16 +78,18 @@ class RobotTrainer:
     def _initialize_ros(self):
         """Initialize ROS nodes, publishers, and services"""
         try:
-            rospy.init_node('robot_trainer', anonymous=True)
-            self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-            self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
+            # Initialize ROS node and publishers
+            rospy.init_node('robot_trainer', anonymous=True)                                    # Initialize ROS node
+            self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)                 # Initialize velocity publisher
+            self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)       # Initialize simulation reset service
             
             # Wait for gazebo services
-            rospy.wait_for_service('/gazebo/set_model_state', timeout=10.0)
-            self.set_model_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
+            rospy.wait_for_service('/gazebo/set_model_state', timeout=10.0)                     # Wait for gazebo service
+            self.set_model_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState) # Initialize model state service
             
-            rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)
-            rospy.loginfo("ROS initialization completed")
+            # Initialize odometry subscriber
+            rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
+            rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
         except rospy.ROSException as e:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
@@ -110,8 +112,8 @@ class RobotTrainer:
         """Check if the current episode has exceeded the maximum time limit"""
         if self.start_time is None:
             return False
-            
-        elapsed_time = time.time() - self.start_time
+        
+        elapsed_time = time.time() - self.start_time    # Check elapsed time
         if elapsed_time > self.MAX_TIME:
             rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
             return True
@@ -161,7 +163,7 @@ class RobotTrainer:
                 model_state.model_name = 'turtlebot3_burger'
                 model_state.pose.position.x = x
                 model_state.pose.position.y = y
-                model_state.pose.position.z = 0
+                model_state.pose.position.z = 0.1
                 model_state.pose.orientation.x = quaternion[0]
                 model_state.pose.orientation.y = quaternion[1]
                 model_state.pose.orientation.z = quaternion[2]
@@ -238,7 +240,7 @@ class RobotTrainer:
         rospy.loginfo(f"Total reward: {self.current_episode_reward:.2f}")
         rospy.loginfo(f"Success rate: {success_rate:.2f}%")
         rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
-        rospy.loginfo(f"Total steps: {self.total_steps:.2f}s")
+        rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
 
@@ -254,13 +256,17 @@ class RobotTrainer:
             self.log_episode_stats(episode_time)
         
         try:
+            # Reset simulation
             self.reset_simulation()
+            # Delay for simulation reset
             time.sleep(0.2)
             
+            # Spawn robot in random position
             if not self.spawn_robot_random():
                 rospy.logerr("Failed to reset episode - spawn failed")
                 return
             
+            # Reset episode variables
             self.start_time = time.time()
             self.current_episode_reward = 0
             self.steps_in_episode = 0
@@ -281,35 +287,40 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
         try:
+            # S,A,R,S',done
             done = self.check_timeout()
             state = self.get_state_from_odom(msg)
             
-            action = self.select_action(state)
-            self.publish_velocity(action)
-            time.sleep(0.1)
+            action = self.select_action(state)      # Select action
+            self.publish_velocity(action)           # Execute action
+            time.sleep(0.1)                         # Delay for simulating real-time operation 10 Hz
             
             next_state = self.get_state_from_odom(msg)
             reward, terminated = self.compute_reward(state, next_state)
             
-            done = done or terminated
-            self.current_episode_reward += reward
-            self.steps_in_episode += 1
+            done = done or terminated               # Episode termination
+            self.current_episode_reward += reward   # Update episode reward
+            self.steps_in_episode += 1              # Update episode steps
             
+            # Add experience to replay buffer
             if self.old_state is not None:
                 self.replay_buffer.add(
-                    self.old_state,
-                    self.old_action,
+                    state,
+                    action,
                     next_state,
                     reward,
                     float(done)
                 )
             
+            # Train policy
             if self.replay_buffer.size > self.TRAINING_START_SIZE:
                 self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
-            
+
+            # Update state and action
             self.old_state = state if not done else None
             self.old_action = action if not done else None
             
+            # Reset episode if done
             if done:
                 self.reset()
                 
