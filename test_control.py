@@ -16,9 +16,13 @@ import ExpD3
 import OurDDPG, TD3, SAC
 import utils
 
+
+''' Implementare la reward function - Implementare lo spawn del robot random - Implementare contatore dei tempi ~ 10 h di simulazione in base alla frequenza '''
+# Initialize publisher for cmd_vel
 pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
 
+# Define state dimensions and action space
 state_dim = 6
 action_dim = 2
 
@@ -30,8 +34,8 @@ old_state = None
 old_action = None
 replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=10**5)
 # policy = TD3.TD3(state_dim, action_dim, max_action=1)
-# policy = ExpD3.DDPG(state_dim, action_dim, max_action=1)
-policy = OurDDPG.DDPG(state_dim, action_dim, max_action=1, tau=0.1)
+policy = ExpD3.DDPG(state_dim, action_dim, max_action=1)
+#policy = OurDDPG.DDPG(state_dim, action_dim, max_action=1, tau=0.1)
 
 GOAL = [3, 0]
 OBSTACLE = [0, 0]
@@ -55,7 +59,7 @@ def callback(msg):
         start_time = time.time()
     if time.time() - start_time > max_time:
         done = True
-        reset()
+        # reset()
 
     quaternion = (
         msg.pose.pose.orientation.x,
@@ -66,32 +70,17 @@ def callback(msg):
     yaw = euler[2]
 
     x = np.zeros((6,))
-    x[0] = msg.pose.pose.position.x - 3.0 # this is to move the reference frame
+    x[0] = msg.pose.pose.position.x - 1.0 # this is to move the reference frame
     x[1] = msg.pose.pose.position.y
     x[2] = yaw
     x[3] = msg.twist.twist.linear.x
     x[4] = msg.twist.twist.linear.y
     x[5] = msg.twist.twist.angular.z
 
-    if np.abs(x[0]) > WALL_dist or np.abs(x[1]) > WALL_dist:
-        done = True
-        reset()
-        reward += -10
-
-    if np.sqrt((x[0]-OBSTACLE[0])**2 + (x[1]-OBSTACLE[1])**2) < OBST_dist:
-        done = True
-        reset()
-        reward += -10
-
-    if np.sqrt((x[0]-GOAL[0])**2 + (x[1]-GOAL[1])**2) < GOAL_dist:
-        done = True
-        reset()
-        reward += +1000
-
     if replay_buffer.size > 10 ** 3:
         action = (
                 policy.select_action(np.array(x))
-                + np.random.normal(0, 0.1, size=action_dim)
+                + np.random.normal(0, 0.3, size=action_dim)
         ).clip(-1, 1)
     else:
         action = (np.random.normal(0, 1, size=action_dim)).clip(-1, 1)
@@ -100,17 +89,11 @@ def callback(msg):
     vel.linear.x = action[0] * max_vel[0]
     vel.angular.z = action[1] * max_vel[1]
 
-    if not done:
-        pub.publish(vel)
+    pub.publish(vel)
+    
+    time.sleep(0.1)
 
     next_state = x
-    if old_state is not None:
-        reward += +1 if np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2) < np.sqrt((old_state[0]-GOAL[0])**2 + (old_state[1]-GOAL[1])**2) else -1
-        # reward += -np.sqrt((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)
-        reward += 5 * np.exp(-((next_state[0]-GOAL[0])**2 + (next_state[1]-GOAL[1])**2)/4)
-
-    # reward = -np.sqrt((x[0]-1)**2 + (x[1]-4)**2)
-    print('Reward', reward, 'state', x, 'action', action, done)
 
     done_bool = float(done)
 
@@ -118,7 +101,7 @@ def callback(msg):
         # Store data in replay buffer
         replay_buffer.add(old_state, old_action, next_state, reward, done_bool)
         if replay_buffer.size > 10**3:
-            policy.train(replay_buffer)
+            policy.train(replay_buffer, batch_size=256)
             print('train')
 
     old_state = next_state if not done else None
