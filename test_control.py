@@ -61,7 +61,7 @@ class RobotTrainer:
         
         # Spawn area limits
         self.SPAWN_LIMITS = {
-            'x': (-1.0, -0.75),  
+            'x': (-0.95, -0.75),  
             'y': (-0.15, 0.15),
             'yaw': (-np.pi/4, np.pi/4)
         }
@@ -90,6 +90,8 @@ class RobotTrainer:
             # Initialize odometry subscriber
             rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
             rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
+
+            self.timer = rospy.Timer(rospy.Duration(0.1), self.check_out_of_bounds)
         except rospy.ROSException as e:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
@@ -163,7 +165,7 @@ class RobotTrainer:
                 model_state.model_name = 'turtlebot3_burger'
                 model_state.pose.position.x = x
                 model_state.pose.position.y = y
-                model_state.pose.position.z = 0.1
+                model_state.pose.position.z = 0.0
                 model_state.pose.orientation.x = quaternion[0]
                 model_state.pose.orientation.y = quaternion[1]
                 model_state.pose.orientation.z = quaternion[2]
@@ -307,6 +309,13 @@ class RobotTrainer:
         
         return True
 
+    def check_out_of_bounds(self, event):
+        state = self.old_state
+        if not self.is_within_bounds(np.array(state[:2])):
+            while not self.is_pointing_inside(np.array(state[:2]), state[2]):
+                action = self.select_action(state)
+                action[0] = 0                   # Stop if out of bounds
+                self.publish_velocity(action)   # Execute action
 
     def callback(self, msg):
         """Callback method"""
@@ -314,13 +323,6 @@ class RobotTrainer:
             # S,A,R,S',done
             done = self.check_timeout()
             state = self.get_state_from_odom(msg)
-
-            # Check if robot is out of bounds
-            if not self.is_within_bounds(np.array(state[:2])):
-                while not self.is_pointing_inside(np.array(state[:2]), state[2]):
-                    action = self.select_action(state)
-                    action[0] = 0                       # Stop if out of bounds
-                    self.publish_velocity(action)       # Execute action
 
             action = self.select_action(state)          # Select action
             self.publish_velocity(action)               # Execute action
