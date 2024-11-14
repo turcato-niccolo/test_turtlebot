@@ -57,6 +57,7 @@ class RobotTrainer:
         self.old_action = None
         self.current_episode_reward = 0
         self.steps_in_episode = 0
+        self.total_steps = 0
         
         # Spawn area limits
         self.SPAWN_LIMITS = {
@@ -237,6 +238,7 @@ class RobotTrainer:
         rospy.loginfo(f"Total reward: {self.current_episode_reward:.2f}")
         rospy.loginfo(f"Success rate: {success_rate:.2f}%")
         rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
+        rospy.loginfo(f"Total steps: {self.total_steps:.2f}s")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
 
@@ -245,6 +247,7 @@ class RobotTrainer:
         if self.start_time is not None:
             episode_time = time.time() - self.start_time
             self.total_training_time += episode_time
+            self.total_steps += self.steps_in_episode
             self.episode_rewards.append(self.current_episode_reward)
             self.avg_episode_length.append(self.steps_in_episode)
             
@@ -271,8 +274,8 @@ class RobotTrainer:
     def publish_velocity(self, action):
         """Publish velocity commands to the robot"""
         vel_msg = Twist()
-        vel_msg.linear.x = action[0] * self.MAX_VEL[0]  # Scale to actual velocity
-        vel_msg.angular.z = action[1] * self.MAX_VEL[1]  # Scale to actual angular velocity
+        vel_msg.linear.x = action[0] * self.MAX_VEL[0]      # Scale to actual velocity
+        vel_msg.angular.z = action[1] * self.MAX_VEL[1]     # Scale to actual angular velocity
         self.cmd_vel_pub.publish(vel_msg)
 
     def callback(self, msg):
