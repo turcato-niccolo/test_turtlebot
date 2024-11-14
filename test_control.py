@@ -104,6 +104,46 @@ class RobotTrainer:
         except Exception as e:
             rospy.logerr(f"RL initialization failed: {e}")
             raise
+    
+    def check_timeout(self):
+        """Check if the current episode has exceeded the maximum time limit"""
+        if self.start_time is None:
+            return False
+            
+        elapsed_time = time.time() - self.start_time
+        if elapsed_time > self.MAX_TIME:
+            rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
+            return True
+        return False
+    
+    def get_state_from_odom(self, msg):
+        """Extract state information from odometry message"""
+        # Robot position
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        
+        # Get orientation
+        quaternion = (
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
+        )
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        yaw = euler[2]
+        
+        # Robot velocities
+        linear_vel = msg.twist.twist.linear.x
+        angular_vel = msg.twist.twist.angular.z
+        
+        # Distance and angle to goal
+        goal_distance = np.sqrt((self.GOAL[0] - x)**2 + (self.GOAL[1] - y)**2)
+        goal_angle = np.arctan2(self.GOAL[1] - y, self.GOAL[0] - x) - yaw
+        
+        # Normalize angle to [-pi, pi]
+        goal_angle = np.arctan2(np.sin(goal_angle), np.cos(goal_angle))
+        
+        return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
 
     def spawn_robot_random(self):
         """Spawn the robot in a random valid position with error handling"""
@@ -117,7 +157,7 @@ class RobotTrainer:
                 quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
                 
                 model_state = ModelState()
-                model_state.model_name = 'turtlebot3'
+                model_state.model_name = 'turtlebot3_burger'
                 model_state.pose.position.x = x
                 model_state.pose.position.y = y
                 model_state.pose.position.z = 0
@@ -136,6 +176,17 @@ class RobotTrainer:
         
         rospy.logerr("Failed to spawn robot after maximum attempts")
         return False
+    
+    def select_action(self, state):
+        """Select action based on current policy or random sampling"""
+        if self.replay_buffer.size > self.TRAINING_START_SIZE:
+            action = (
+                self.policy.select_action(np.array(state))
+                + np.random.normal(0, 0.3, size=self.ACTION_DIM)
+            ).clip(-1, 1)
+        else:
+            action = np.random.normal(0, 1, size=self.ACTION_DIM).clip(-1, 1)
+        return action
 
     def compute_reward(self, state, next_state):
         """Reward computation"""
@@ -216,6 +267,13 @@ class RobotTrainer:
             
         except Exception as e:
             rospy.logerr(f"Error during reset: {e}")
+    
+    def publish_velocity(self, action):
+        """Publish velocity commands to the robot"""
+        vel_msg = Twist()
+        vel_msg.linear.x = action[0] * self.MAX_VEL[0]  # Scale to actual velocity
+        vel_msg.angular.z = action[1] * self.MAX_VEL[1]  # Scale to actual angular velocity
+        self.cmd_vel_pub.publish(vel_msg)
 
     def callback(self, msg):
         """Callback method"""
