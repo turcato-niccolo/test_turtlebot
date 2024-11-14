@@ -112,7 +112,7 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
-		comput_freq = 1/8 # 8Hz
+		comput_freq = 1/100 # 8Hz
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
 		comput_freq = 1/10 # 10Hz
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 		comput_freq = 1/15 # 15Hz
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
-		comput_freq = 1/5 # 5Hz
+		comput_freq = 1/100 # 5Hz
 		kwargs = {
 			"num_inputs": state_dim,             	# The state dimension
 			"action_space": env.action_space,     	# The action space object
