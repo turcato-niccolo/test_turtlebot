@@ -284,23 +284,54 @@ class RobotTrainer:
         vel_msg.angular.z = action[1] * self.MAX_VEL[1]     # Scale to actual angular velocity
         self.cmd_vel_pub.publish(vel_msg)
 
+    def is_within_bounds(self, p):
+        """Check if the x and y components of self.p are within the map limits"""
+        x = p[0]
+        y = p[1]
+        return -1.0 < x < 1.0 and -1.0 < y < 1.0
+
+    def is_pointing_inside(self, p, yaw):
+        """Check if the robot is pointing inside the map"""
+        x = p[0]
+        y = p[1]
+
+        # Check the robot position outside the map
+        if x > self.WALL_DIST and -self.WALL_DIST < y < self.WALL_DIST: # UP
+            return np.arctan2(self.WALL_DIST - y, self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, self.WALL_DIST - x)
+        elif x < -self.WALL_DIST and -self.WALL_DIST < y < self.WALL_DIST: # DOWN
+            return np.arctan2(self.WALL_DIST - y, -self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, -self.WALL_DIST - x)
+        elif y > self.WALL_DIST and -self.WALL_DIST < x < self.WALL_DIST: # LEFT
+            return np.arctan2(self.WALL_DIST - y, -self.WALL_DIST - x) < yaw < np.arctan2(self.WALL_DIST - y, self.WALL_DIST - x)
+        elif y < -self.WALL_DIST and -self.WALL_DIST < x < self.WALL_DIST: # RIGHT
+            return np.arctan2(-self.WALL_DIST - y, self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, -self.WALL_DIST - x)
+        
+        return True
+
+
     def callback(self, msg):
         """Callback method"""
         try:
             # S,A,R,S',done
             done = self.check_timeout()
             state = self.get_state_from_odom(msg)
-            
-            action = self.select_action(state)      # Select action
-            self.publish_velocity(action)           # Execute action
-            time.sleep(0.1)                         # Delay for simulating real-time operation 10 Hz
+
+            # Check if robot is out of bounds
+            if not self.is_within_bounds(np.array(state[:2])):
+                while not self.is_pointing_inside(np.array(state[:2]), state[2]):
+                    action = self.select_action(state)
+                    action[0] = 0                       # Stop if out of bounds
+                    self.publish_velocity(action)       # Execute action
+
+            action = self.select_action(state)          # Select action
+            self.publish_velocity(action)               # Execute action
+            time.sleep(0.1)                             # Delay for simulating real-time operation 10 Hz
             
             next_state = self.get_state_from_odom(msg)
             reward, terminated = self.compute_reward(state, next_state)
             
-            done = done or terminated               # Episode termination
-            self.current_episode_reward += reward   # Update episode reward
-            self.steps_in_episode += 1              # Update episode steps
+            done = done or terminated                   # Episode termination
+            self.current_episode_reward += reward       # Update episode reward
+            self.steps_in_episode += 1                  # Update episode steps
             
             # Add experience to replay buffer
             if self.old_state is not None:
