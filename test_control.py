@@ -161,7 +161,7 @@ class RobotTrainer:
                 model_state.model_name = 'turtlebot3_burger'
                 model_state.pose.position.x = x
                 model_state.pose.position.y = y
-                model_state.pose.position.z = 0
+                model_state.pose.position.z = 0.1
                 model_state.pose.orientation.x = quaternion[0]
                 model_state.pose.orientation.y = quaternion[1]
                 model_state.pose.orientation.z = quaternion[2]
@@ -238,7 +238,7 @@ class RobotTrainer:
         rospy.loginfo(f"Total reward: {self.current_episode_reward:.2f}")
         rospy.loginfo(f"Success rate: {success_rate:.2f}%")
         rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
-        rospy.loginfo(f"Total steps: {self.total_steps:.2f}s")
+        rospy.loginfo(f"Total steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
 
@@ -297,8 +297,8 @@ class RobotTrainer:
             
             if self.old_state is not None:
                 self.replay_buffer.add(
-                    self.old_state,
-                    self.old_action,
+                    state,
+                    action,
                     next_state,
                     reward,
                     float(done)
