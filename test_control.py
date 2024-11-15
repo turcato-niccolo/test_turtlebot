@@ -91,7 +91,6 @@ class RobotTrainer:
             rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
             rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
 
-            self.timer = rospy.Timer(rospy.Duration(0.1), self.check_out_of_bounds)
         except rospy.ROSException as e:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
@@ -210,11 +209,12 @@ class RobotTrainer:
         reward -= self.DISTANCE_PENALTY * dist_to_goal ** 2
         reward += self.GAUSSIAN_REWARD_SCALE * np.exp(-dist_to_goal**2)
         
-        # Movement reward/penalty
-        if dist_to_goal >= prev_dist_to_goal:
-            reward -= self.MOVEMENT_PENALTY
-        else:
-            reward += self.MOVEMENT_PENALTY
+        if prev is not None:
+            # Movement reward/penalty
+            if dist_to_goal >= prev_dist_to_goal:
+                reward -= self.MOVEMENT_PENALTY
+            else:
+                reward += self.MOVEMENT_PENALTY
         
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
@@ -317,40 +317,91 @@ class RobotTrainer:
                 action[0] = 0                   # Stop if out of bounds
                 self.publish_velocity(action)   # Execute action
 
+    def check_boundaries(self, x, y, theta, max_linear_vel=2.0):
+        """Check if robot is at boundaries and control its movement."""
+
+        # Define map limits
+        X_MIN, X_MAX = -self.WALL_DIST, self.WALL_DIST
+        Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
+        
+        # Small margin to detect boundary approach
+        MARGIN = 0.05
+        
+        # Check if robot is near boundaries
+        at_x_min = x <= X_MIN + MARGIN
+        at_x_max = x >= X_MAX - MARGIN
+        at_y_min = y <= Y_MIN + MARGIN
+        at_y_max = y >= Y_MAX - MARGIN
+        
+        is_at_boundary = at_x_min or at_x_max or at_y_min or at_y_max
+        
+        if not is_at_boundary:
+            return max_linear_vel, False
+            
+        # Calculate the direction vector pointing inward
+        target_x = self.GOAL[0]
+        target_y = self.GOAL[1]
+        
+        # Calculate angle to center of map
+        angle_to_center = np.atan2(target_y - y, target_x - x)
+        
+        # Normalize angles to [-pi, pi]
+        theta = np.atan2(np.sin(theta), np.cos(theta))
+        angle_diff = np.atan2(np.sin(angle_to_center - theta), 
+                            np.cos(angle_to_center - theta))
+        
+        # Check if robot is pointing inward (within 45 degrees of center direction)
+        pointing_inward = abs(angle_diff) < np.pi/4
+        
+        # Calculate allowed linear velocity
+        if pointing_inward:
+            # Gradually increase velocity as robot points more directly inward
+            inward_factor = np.cos(angle_diff)  # 1.0 when perfectly aligned, 0.0 at 90 degrees
+            allowed_linear_vel = max_linear_vel * inward_factor
+        else:
+            # Stop linear movement if pointing outward
+            allowed_linear_vel = 0.0
+        
+        return allowed_linear_vel, True
+
     def callback(self, msg):
         """Callback method"""
         try:
             # S,A,R,S',done
             done = self.check_timeout()
-            state = self.get_state_from_odom(msg)
-
-            action = self.select_action(state)          # Select action
-            self.publish_velocity(action)               # Execute action
-            time.sleep(0.1)                             # Delay for simulating real-time operation 10 Hz
-            
             next_state = self.get_state_from_odom(msg)
-            reward, terminated = self.compute_reward(state, next_state)
+
+            # Check boundaries and get allowed velocity
+            allowed_vel, at_boundary = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
-            done = done or terminated                   # Episode termination
-            self.current_episode_reward += reward       # Update episode reward
-            self.steps_in_episode += 1                  # Update episode steps
+            if at_boundary:
+                # Robot is at boundary, stop and turn inward
+                action = self.select_action(next_state)     # Select action
+                action[0] = min(action[0], allowed_vel)     # Limit linear velocity
+                
+            else:
+                # Robot is not at boundary, letsgoski
+                action = self.select_action(next_state)     # Select action
             
+            self.publish_velocity(action)                   # Execute action
+            time.sleep(0.1)                                 # Delay for simulating real-time operation 10 Hz
+                
+            reward, terminated = self.compute_reward(self.old_state, next_state)
+                
+            done = done or terminated                       # Episode termination
+            self.current_episode_reward += reward           # Update episode reward
+            self.steps_in_episode += 1                      # Update episode steps
+                
             # Add experience to replay buffer
             if self.old_state is not None:
-                self.replay_buffer.add(
-                    state,
-                    action,
-                    next_state,
-                    reward,
-                    float(done)
-                )
-            
+                self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
+                
             # Train policy
             if self.replay_buffer.size > self.TRAINING_START_SIZE:
                 self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
 
             # Update state and action
-            self.old_state = state if not done else None
+            self.old_state = next_state if not done else None
             self.old_action = action if not done else None
             
             # Reset episode if done
