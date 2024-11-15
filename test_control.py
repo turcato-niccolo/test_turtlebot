@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import time
 import tf
+import os
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, Pose
 from std_srvs.srv import Empty
@@ -23,10 +24,13 @@ class RobotTrainer:
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
         self.MAX_VEL = [2.0, np.pi/2]
-        self.MAX_TIME = 10
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = 256
         self.TRAINING_START_SIZE = 10**3
+        self.SAMPLE_FREQ = 1 / 10
+        self.MAX_STEP_EPISODE = 500
+        self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
+        self.EVAL_FREQ = 5000
         
         # Environment parameters
         self.GOAL = np.array([1.0, 0.0])
@@ -35,6 +39,7 @@ class RobotTrainer:
         self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
+        self.HOME = np.array([-1.0, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -50,6 +55,13 @@ class RobotTrainer:
         self.success_count = 0
         self.collision_count = 0
         self.avg_episode_length = []
+
+        # Stats to save
+        self.episodes = []
+        self.rewards = []
+        self.success = []
+        self.collisions = []
+        self.training_time = []
         
         # State variables
         self.start_time = None
@@ -149,15 +161,21 @@ class RobotTrainer:
         
         return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
 
+    def home_pos_init(self):
+        """Compute the initial position ramdomly"""
+        x = np.random.uniform(self.SPAWN_LIMITS['x'][0], self.SPAWN_LIMITS['x'][1])
+        y = np.random.uniform(self.SPAWN_LIMITS['y'][0], self.SPAWN_LIMITS['y'][1])
+        yaw = np.random.uniform(self.SPAWN_LIMITS['yaw'][0], self.SPAWN_LIMITS['yaw'][1])
+
+        return x,y,yaw
+        
     def spawn_robot_random(self):
         """Spawn the robot in a random valid position with error handling"""
         max_attempts = 5
         for attempt in range(max_attempts):
             try:
-                x = np.random.uniform(self.SPAWN_LIMITS['x'][0], self.SPAWN_LIMITS['x'][1])
-                y = np.random.uniform(self.SPAWN_LIMITS['y'][0], self.SPAWN_LIMITS['y'][1])
-                yaw = np.random.uniform(self.SPAWN_LIMITS['yaw'][0], self.SPAWN_LIMITS['yaw'][1])
-                
+                x, y, yaw = self.home_pos_init()
+
                 quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
                 
                 model_state = ModelState()
@@ -194,12 +212,9 @@ class RobotTrainer:
 
     def compute_reward(self, state, next_state):
         """Reward computation"""
+
         p = np.array(next_state[:2])
-        prev = np.array(state[:2])
-        
-        # Calculate distances
         dist_to_goal = np.linalg.norm(p - self.GOAL)
-        prev_dist_to_goal = np.linalg.norm(prev - self.GOAL)
         
         # Initialize reward and termination flag
         reward = 0
@@ -209,7 +224,11 @@ class RobotTrainer:
         reward -= self.DISTANCE_PENALTY * dist_to_goal ** 2
         reward += self.GAUSSIAN_REWARD_SCALE * np.exp(-dist_to_goal**2)
         
-        if prev is not None:
+        if state is not None:
+            prev = np.array(state[:2])
+            # Calculate prev distance
+            prev_dist_to_goal = np.linalg.norm(prev - self.GOAL)
+
             # Movement reward/penalty
             if dist_to_goal >= prev_dist_to_goal:
                 reward -= self.MOVEMENT_PENALTY
@@ -246,9 +265,31 @@ class RobotTrainer:
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
 
+    def save_stats(self):
+        """Save detailed statistics"""
+        success_rate = self.success_count / (self.episode_count + 1) * 100
+        collision_rate = self.collision_count / (self.episode_count + 1) * 100
+
+        self.episodes.append(self.episode_count)
+        self.rewards.append(self.current_episode_reward)
+        self.success.append(success_rate)
+        self.collisions.append(collision_rate)
+        self.training_time.append(self.total_training_time)
+        # Save stats
+        np.savez(
+            "./results/stats.npz", 
+            Total_Episodes=self.episodes, 
+            Total_Reward=self.rewards, 
+            Success_Rate=self.success, 
+            Collision_Rate=self.collisions,
+            Training_Time=self.training_time
+        )
+        # Save model
+        self.policy.save(f"./models/TD3_0")
+
     def reset(self):
         """Reset method with statistics"""
-        if self.start_time is not None:
+        if self.start_time is not None: # Episode finished
             episode_time = time.time() - self.start_time
             self.total_training_time += episode_time
             self.total_steps += self.steps_in_episode
@@ -256,6 +297,7 @@ class RobotTrainer:
             self.avg_episode_length.append(self.steps_in_episode)
             
             self.log_episode_stats(episode_time)
+            self.save_stats()
         
         try:
             # Reset simulation
@@ -286,38 +328,7 @@ class RobotTrainer:
         vel_msg.angular.z = action[1] * self.MAX_VEL[1]     # Scale to actual angular velocity
         self.cmd_vel_pub.publish(vel_msg)
 
-    def is_within_bounds(self, p):
-        """Check if the x and y components of self.p are within the map limits"""
-        x = p[0]
-        y = p[1]
-        return -1.0 < x < 1.0 and -1.0 < y < 1.0
-
-    def is_pointing_inside(self, p, yaw):
-        """Check if the robot is pointing inside the map"""
-        x = p[0]
-        y = p[1]
-
-        # Check the robot position outside the map
-        if x > self.WALL_DIST and -self.WALL_DIST < y < self.WALL_DIST: # UP
-            return np.arctan2(self.WALL_DIST - y, self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, self.WALL_DIST - x)
-        elif x < -self.WALL_DIST and -self.WALL_DIST < y < self.WALL_DIST: # DOWN
-            return np.arctan2(self.WALL_DIST - y, -self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, -self.WALL_DIST - x)
-        elif y > self.WALL_DIST and -self.WALL_DIST < x < self.WALL_DIST: # LEFT
-            return np.arctan2(self.WALL_DIST - y, -self.WALL_DIST - x) < yaw < np.arctan2(self.WALL_DIST - y, self.WALL_DIST - x)
-        elif y < -self.WALL_DIST and -self.WALL_DIST < x < self.WALL_DIST: # RIGHT
-            return np.arctan2(-self.WALL_DIST - y, self.WALL_DIST - x) < yaw < np.arctan2(-self.WALL_DIST - y, -self.WALL_DIST - x)
-        
-        return True
-
-    def check_out_of_bounds(self, event):
-        state = self.old_state
-        if not self.is_within_bounds(np.array(state[:2])):
-            while not self.is_pointing_inside(np.array(state[:2]), state[2]):
-                action = self.select_action(state)
-                action[0] = 0                   # Stop if out of bounds
-                self.publish_velocity(action)   # Execute action
-
-    def check_boundaries(self, x, y, theta, max_linear_vel=2.0):
+    def check_boundaries(self, x, y, theta, max_linear_vel):
         """Check if robot is at boundaries and control its movement."""
 
         # Define map limits
@@ -325,7 +336,7 @@ class RobotTrainer:
         Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
         
         # Small margin to detect boundary approach
-        MARGIN = 0.05
+        MARGIN = 0.15
         
         # Check if robot is near boundaries
         at_x_min = x <= X_MIN + MARGIN
@@ -343,11 +354,11 @@ class RobotTrainer:
         target_y = self.GOAL[1]
         
         # Calculate angle to center of map
-        angle_to_center = np.atan2(target_y - y, target_x - x)
+        angle_to_center = np.arctan2(target_y - y, target_x - x)
         
         # Normalize angles to [-pi, pi]
-        theta = np.atan2(np.sin(theta), np.cos(theta))
-        angle_diff = np.atan2(np.sin(angle_to_center - theta), 
+        theta = np.arctan2(np.sin(theta), np.cos(theta))
+        angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
                             np.cos(angle_to_center - theta))
         
         # Check if robot is pointing inward (within 45 degrees of center direction)
@@ -355,15 +366,46 @@ class RobotTrainer:
         
         # Calculate allowed linear velocity
         if pointing_inward:
-            # Gradually increase velocity as robot points more directly inward
-            inward_factor = np.cos(angle_diff)  # 1.0 when perfectly aligned, 0.0 at 90 degrees
-            allowed_linear_vel = max_linear_vel * inward_factor
+            allowed_linear_vel = max_linear_vel
         else:
             # Stop linear movement if pointing outward
             allowed_linear_vel = 0.0
         
         return allowed_linear_vel, True
+    '''TO FINISH'''
+    def come_back_home(self, x, y, theta):
+        """Navigate the robot back to the home position."""
+        try:
+            rospy.loginfo("Initiating come-back-home behavior.")
+            
+            # Ensure home position is defined
+            if self.HOME is None:
+                rospy.logerr("Home position is not set.")
+                return
 
+            home_position = self.HOME
+            current_position = np.array(self.old_state[:2])
+            distance_to_home = np.linalg.norm(current_position - home_position)
+
+            if distance_to_home > self.GOAL_DIST:
+                # Calculate direction vector and normalize
+                direction = home_position - current_position
+                direction /= distance_to_home
+
+                # Set velocities to move toward home
+                linear_velocity = min(self.MAX_VEL[0], distance_to_home)    # Cap velocity
+
+                self.publish_velocity([linear_velocity, 0.0])
+                time.sleep(0.1)  # Simulate real-time control loop
+            else:
+                # Stop the robot
+                self.publish_velocity([0, 0])
+                rospy.loginfo("Robot has returned home.")
+
+        except Exception as e:
+            rospy.logerr(f"Error in come_back_home: {e}")
+            self.publish_velocity([0, 0])  # Ensure robot stops on error
+    '''TO FINISH'''
     def callback(self, msg):
         """Callback method"""
         try:
@@ -373,25 +415,30 @@ class RobotTrainer:
 
             # Check boundaries and get allowed velocity
             allowed_vel, at_boundary = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
-            
+
+            action = self.select_action(next_state)             # Select action
+            temp_action = action
+
             if at_boundary:
                 # Robot is at boundary, stop and turn inward
-                action = self.select_action(next_state)     # Select action
-                action[0] = min(action[0], allowed_vel)     # Limit linear velocity
-                
-            else:
-                # Robot is not at boundary, letsgoski
-                action = self.select_action(next_state)     # Select action
-            
-            self.publish_velocity(action)                   # Execute action
-            time.sleep(0.1)                                 # Delay for simulating real-time operation 10 Hz
-                
+                if action[0] > 0.0:
+                    temp_action[0] = min(action[0], allowed_vel)    # Limit linear velocity
+                else:
+                    temp_action[0] = 0.0
+
             reward, terminated = self.compute_reward(self.old_state, next_state)
-                
-            done = done or terminated                       # Episode termination
-            self.current_episode_reward += reward           # Update episode reward
-            self.steps_in_episode += 1                      # Update episode steps
-                
+
+            done = done or terminated                           # Episode termination
+            self.current_episode_reward += reward               # Update episode reward
+            self.steps_in_episode += 1                          # Update episode steps
+
+            if not done:
+                self.publish_velocity(temp_action)              # Execute action
+                time.sleep(self.SAMPLE_FREQ)                    # Delay for simulating real-time operation 10 Hz
+            
+            '''if temp_action[0] == 0:
+                print(f"Action: [{temp_action[0]:.1f}, {temp_action[1]:.1f}]")'''
+
             # Add experience to replay buffer
             if self.old_state is not None:
                 self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
@@ -399,22 +446,35 @@ class RobotTrainer:
             # Train policy
             if self.replay_buffer.size > self.TRAINING_START_SIZE:
                 self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
-
+            
             # Update state and action
             self.old_state = next_state if not done else None
             self.old_action = action if not done else None
-            
+
             # Reset episode if done
             if done:
                 self.reset()
+            
+            '''
+            # Evaluate the policy
+            if self.total_steps + self.steps_in_episode % self.EVAL_FREQ:
+                # Implement the evaluation procedure
+                self.save_stats()'''
                 
         except Exception as e:
             rospy.logerr(f"Error in callback: {e}")
 
 def main():
     try:
+        if not os.path.exists("./results"):
+            os.makedirs("./results")
+
+        if not os.path.exists("./models"):
+            os.makedirs("./models")
+            
         trainer = RobotTrainer()
         trainer.reset()
+        
         rospy.spin()
     except rospy.ROSInterruptException:
         rospy.loginfo("Training interrupted")
