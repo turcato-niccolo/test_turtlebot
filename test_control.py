@@ -126,7 +126,7 @@ class RobotTrainer:
         if self.start_time is None:
             return False
         
-        elapsed_time = time.time() - self.start_time    # Check elapsed time
+        elapsed_time = rospy.get_time() - self.start_time    # Check elapsed time
         if elapsed_time > self.MAX_TIME:
             rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
             return True
@@ -194,7 +194,7 @@ class RobotTrainer:
                     return True
             except rospy.ServiceException as e:
                 rospy.logwarn(f"Spawn attempt {attempt + 1} failed: {e}")
-                time.sleep(0.5)
+                rospy.sleep(0.5)
         
         rospy.logerr("Failed to spawn robot after maximum attempts")
         return False
@@ -202,12 +202,22 @@ class RobotTrainer:
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
-            action = (
-                self.policy.select_action(np.array(state))
-                + np.random.normal(0, 0.3, size=self.ACTION_DIM)
-            ).clip(-1, 1)
+            # Get action from the policy (linear and angular velocities)
+            action = self.policy.select_action(np.array(state))
+            # Add random noise for exploration
+            action += np.random.normal(0, 0.3, size=self.ACTION_DIM)
+            # Clip the linear velocity to be between 0 and 1
+            action[0] = np.clip(action[0], 0, 1)
+            # Clip the angular velocity to be between -1 and 1
+            action[1] = np.clip(action[1], -1, 1)
         else:
-            action = np.random.normal(0, 1, size=self.ACTION_DIM).clip(-1, 1)
+            # Random action sampling
+            action = np.random.normal(0, 1, size=self.ACTION_DIM)
+            # Clip the linear velocity to be between 0 and 1
+            action[0] = np.clip(action[0], 0, 1)
+            # Clip the angular velocity to be between -1 and 1
+            action[1] = np.clip(action[1], -1, 1)
+
         return action
 
     def compute_reward(self, state, next_state):
@@ -290,7 +300,7 @@ class RobotTrainer:
     def reset(self):
         """Reset method with statistics"""
         if self.start_time is not None: # Episode finished
-            episode_time = time.time() - self.start_time
+            episode_time = rospy.get_time() - self.start_time
             self.total_training_time += episode_time
             self.total_steps += self.steps_in_episode
             self.episode_rewards.append(self.current_episode_reward)
@@ -303,7 +313,7 @@ class RobotTrainer:
             # Reset simulation
             self.reset_simulation()
             # Delay for simulation reset
-            time.sleep(0.2)
+            rospy.sleep(0.2)
             
             # Spawn robot in random position
             if not self.spawn_robot_random():
@@ -311,7 +321,7 @@ class RobotTrainer:
                 return
             
             # Reset episode variables
-            self.start_time = time.time()
+            self.start_time = rospy.get_time()
             self.current_episode_reward = 0
             self.steps_in_episode = 0
             self.episode_count += 1
@@ -396,7 +406,7 @@ class RobotTrainer:
                 linear_velocity = min(self.MAX_VEL[0], distance_to_home)    # Cap velocity
 
                 self.publish_velocity([linear_velocity, 0.0])
-                time.sleep(0.1)  # Simulate real-time control loop
+                rospy.sleep(0.1)  # Simulate real-time control loop
             else:
                 # Stop the robot
                 self.publish_velocity([0, 0])
@@ -434,7 +444,7 @@ class RobotTrainer:
 
             if not done:
                 self.publish_velocity(temp_action)              # Execute action
-                time.sleep(self.SAMPLE_FREQ)                    # Delay for simulating real-time operation 10 Hz
+                rospy.sleep(self.SAMPLE_FREQ)                    # Delay for simulating real-time operation 10 Hz
             
             '''if temp_action[0] == 0:
                 print(f"Action: [{temp_action[0]:.1f}, {temp_action[1]:.1f}]")'''
