@@ -2,7 +2,6 @@
 import rospy
 import torch
 import numpy as np
-import time
 import tf
 import os
 from nav_msgs.msg import Odometry
@@ -161,7 +160,7 @@ class RobotTrainer:
         
         return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
 
-    def home_pos_init(self):
+    def random_init_pos(self):
         """Compute the initial position ramdomly"""
         x = np.random.uniform(self.SPAWN_LIMITS['x'][0], self.SPAWN_LIMITS['x'][1])
         y = np.random.uniform(self.SPAWN_LIMITS['y'][0], self.SPAWN_LIMITS['y'][1])
@@ -174,7 +173,7 @@ class RobotTrainer:
         max_attempts = 5
         for attempt in range(max_attempts):
             try:
-                x, y, yaw = self.home_pos_init()
+                x, y, yaw = self.random_init_pos()
 
                 quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
                 
@@ -300,14 +299,15 @@ class RobotTrainer:
     def reset(self):
         """Reset method with statistics"""
         if self.start_time is not None: # Episode finished
+            
             episode_time = rospy.get_time() - self.start_time
             self.total_training_time += episode_time
             self.total_steps += self.steps_in_episode
             self.episode_rewards.append(self.current_episode_reward)
             self.avg_episode_length.append(self.steps_in_episode)
             
-            self.log_episode_stats(episode_time)
-            self.save_stats()
+            self.log_episode_stats(episode_time) # Log episode stats
+            self.save_stats() # Save stats
         
         try:
             # Reset simulation
@@ -476,15 +476,18 @@ class RobotTrainer:
 
 def main():
     try:
+        # Create data folders
         if not os.path.exists("./results"):
             os.makedirs("./results")
 
         if not os.path.exists("./models"):
             os.makedirs("./models")
-            
+        
+        # Initialize the robot trainer
         trainer = RobotTrainer()
         trainer.reset()
         
+        # Start the training loop
         rospy.spin()
     except rospy.ROSInterruptException:
         rospy.loginfo("Training interrupted")
