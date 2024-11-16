@@ -54,7 +54,7 @@ class DDPG(object):
 			 policy_noise=0.2,
 			 noise_clip=0.5,
 			 OVER=1.,
-			 UNDER=1.,
+			 UNDER=2.,
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip
