@@ -72,11 +72,11 @@ if __name__ == "__main__":
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
 
-	if not os.path.exists("./results_100"):
-		os.makedirs("./results_100")
+	if not os.path.exists("./results"):
+		os.makedirs("./results")
 
-	if args.save_model and not os.path.exists("./models_100"):
-		os.makedirs("./models_100")
+	if args.save_model and not os.path.exists("./models"):
+		os.makedirs("./models")
 
 	if args.env == "MR-env":
 		env = M.MobileRobotEnv()
@@ -216,13 +216,13 @@ if __name__ == "__main__":
 			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate, freq=comput_freq)
 			evaluations.append(evaluation)
 			successes.append(success)
-			np.save(f"./results_100/{file_name}", evaluations)
-			np.save(f"./results_100/{file_name}_s", successes)
-			np.save(f"./results_100/{file_name}_t", target_reached / (episode_num+1))
+			np.save(f"./results/{file_name}", evaluations)
+			np.save(f"./results/{file_name}_s", successes)
+			np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
 			#print("---------------------------------------------------------------------")
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
 			#print("---------------------------------------------------------------------")
 
 		# Save final policy if successful
-		if success == 10: policy.save(f"./models_100/{file_name}")
+		if success == 10: policy.save(f"./models/{file_name}")
