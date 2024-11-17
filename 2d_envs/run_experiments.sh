@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Scripts to reproduce results
-: << 'COMMENT'
+
 for ((i=0;i<10;i+=1))
 do
     #python3 main.py \
@@ -25,8 +25,9 @@ do
     #--seed $i &
 
 done
-COMMENT
 
+
+: << 'COMMENT'
 # Script to reproduce results
 
 max_parallel=3  # Maximum number of parallel processes allowed
@@ -50,3 +51,4 @@ done
 
 # Wait for any remaining jobs to finish
 wait
+COMMENT
