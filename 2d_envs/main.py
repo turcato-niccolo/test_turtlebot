@@ -71,11 +71,11 @@ if __name__ == "__main__":
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
 
-	if not os.path.exists("./results_100"):
-		os.makedirs("./results_100")
+	if not os.path.exists("./results_expD3_8"):
+		os.makedirs("./results_expD3_8")
 
-	if args.save_model and not os.path.exists("./models_100"):
-		os.makedirs("./models_100")
+	if args.save_model and not os.path.exists("./models_expD3_8"):
+		os.makedirs("./models_expD3_8")
 
 	if args.env == "MR-env":
 		env = M.MobileRobotEnv()
@@ -111,13 +111,13 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
-		comput_freq = 1/8 # 8Hz
+		comput_freq = 1/15 # 8Hz
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
 		comput_freq = 1/10 # 10Hz
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
-		comput_freq = 1/15 # 15Hz
+		comput_freq = 1/8 # 15Hz
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
 		comput_freq = 1/8 # 5Hz
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 	# Load model
 	if args.load_model != "":
 		policy_file = file_name if args.load_model == "default" else args.load_model
-		policy.load(f"./models_100/{policy_file}")
+		policy.load(f"./models_expD3_8/{policy_file}")
 	
 	# Initialize replay buffer
 	replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
@@ -215,13 +215,13 @@ if __name__ == "__main__":
 			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate, freq=comput_freq)
 			evaluations.append(evaluation)
 			successes.append(success)
-			np.save(f"./results_100/{file_name}", evaluations)
-			np.save(f"./results_100/{file_name}_s", successes)
-			np.save(f"./results_100/{file_name}_t", target_reached / (episode_num+1))
+			np.save(f"./results_expD3_8/{file_name}", evaluations)
+			np.save(f"./results_expD3_8/{file_name}_s", successes)
+			np.save(f"./results_expD3_8/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
 			#print("---------------------------------------------------------------------")
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
 			#print("---------------------------------------------------------------------")
 
 		# Save final policy if successful
-		if success == 10: policy.save(f"./models_100/{file_name}")
+		if success == 10: policy.save(f"./models_expD3_8/{file_name}")
