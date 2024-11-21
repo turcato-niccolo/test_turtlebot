@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 cuda_available = torch.cuda.is_available()
 device = torch.device("cuda" if cuda_available else "cpu")
-print(f"CUDA Available: {cuda_available}. Version: {torch.version.cuda}")
+#print(f"CUDA Available: {cuda_available}. Version: {torch.version.cuda}")
 
 
 # Re-tuned version of Deep Deterministic Policy Gradients (DDPG)
@@ -17,9 +17,9 @@ class Actor(nn.Module):
 	def __init__(self, state_dim, action_dim, max_action):
 		super(Actor, self).__init__()
 
-		self.l1 = nn.Linear(state_dim, 128)
-		self.l2 = nn.Linear(128, 128)
-		self.l3 = nn.Linear(128, action_dim)
+		self.l1 = nn.Linear(state_dim, 64)
+		self.l2 = nn.Linear(64, 64)
+		self.l3 = nn.Linear(64, action_dim)
 		
 		self.max_action = max_action
 
@@ -34,9 +34,9 @@ class Critic(nn.Module):
 	def __init__(self, state_dim, action_dim):
 		super(Critic, self).__init__()
 
-		self.l1 = nn.Linear(state_dim + action_dim, 128)
-		self.l2 = nn.Linear(128, 128)
-		self.l3 = nn.Linear(128, 1)
+		self.l1 = nn.Linear(state_dim + action_dim, 64)
+		self.l2 = nn.Linear(64, 64)
+		self.l3 = nn.Linear(64, 1)
 
 
 	def forward(self, state, action):

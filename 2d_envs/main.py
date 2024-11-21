@@ -55,11 +55,11 @@ if __name__ == "__main__":
 	parser.add_argument("--policy", default="OurDDPG")              	# Policy name (TD3, DDPG or OurDDPG)
 	parser.add_argument("--env", default="MR-env")                  	# Custom gym environment name
 	parser.add_argument("--seed", default=0, type=int)              	# Sets Gym, PyTorch and Numpy seeds
-	parser.add_argument("--start_timesteps", default=25e3, type=int)	# Time steps initial random policy is used
+	parser.add_argument("--start_timesteps", default=5e3, type=int)		# Time steps initial random policy is used
 	parser.add_argument("--eval_freq", default=5e3, type=int)       	# How often (time steps) we evaluate
-	parser.add_argument("--max_timesteps", default=1e6, type=int) 		# Max time steps to run environment
+	parser.add_argument("--max_timesteps", default=5e5, type=int) 		# Max time steps to run environment
 	parser.add_argument("--expl_noise", default=0.3, type=float)    	# Std of Gaussian exploration noise
-	parser.add_argument("--batch_size", default=256, type=int)      	# Batch size for both actor and critic
+	parser.add_argument("--batch_size", default=64, type=int)      		# Batch size for both actor and critic
 	parser.add_argument("--discount", default=0.99, type=float)     	# Discount factor
 	parser.add_argument("--tau", default=0.005, type=float)         	# Target network update rate
 	parser.add_argument("--policy_noise", default=0.2)              	# Noise added to target policy during critic update
@@ -71,11 +71,11 @@ if __name__ == "__main__":
 
 	file_name = f"{args.policy}_{args.env}_{args.seed}"
 
-	if not os.path.exists("./results_expD3_8"):
-		os.makedirs("./results_expD3_8")
+	if not os.path.exists("./results"):
+		os.makedirs("./results")
 
-	if args.save_model and not os.path.exists("./models_expD3_8"):
-		os.makedirs("./models_expD3_8")
+	if args.save_model and not os.path.exists("./models"):
+		os.makedirs("./models")
 
 	if args.env == "MR-env":
 		env = M.MobileRobotEnv()
@@ -111,16 +111,16 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
-		comput_freq = 1/15 # 8Hz
+		comput_freq = 1/11 # 11Hz
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
 		comput_freq = 1/10 # 10Hz
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
-		comput_freq = 1/8 # 15Hz
+		comput_freq = 1/16 # 16Hz
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
-		comput_freq = 1/8 # 5Hz
+		comput_freq = 1/6 # 6Hz
 		kwargs = {
 			"num_inputs": state_dim,             	# The state dimension
 			"action_space": env.action_space,     	# The action space object
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 	# Load model
 	if args.load_model != "":
 		policy_file = file_name if args.load_model == "default" else args.load_model
-		policy.load(f"./models_expD3_8/{policy_file}")
+		policy.load(f"./models/{policy_file}")
 	
 	# Initialize replay buffer
 	replay_buffer = utils.ReplayBuffer(state_dim, action_dim)
@@ -182,8 +182,13 @@ if __name__ == "__main__":
 		# Perform action
 		next_state, reward, done, info = env.step(action, episode_timesteps, comput_freq)
 
+		# Convert to float32
+		state = state.astype(np.float32)
+		next_state = next_state.astype(np.float32)
+		reward = np.float32(reward)
+
 		# Store data in replay buffer
-		replay_buffer.add(state, action, next_state, reward, done)
+		replay_buffer.add(state, action, next_state, reward, done) # To save this 61 bytes
 
 		# Store state and reward
 		state = next_state
@@ -192,7 +197,7 @@ if __name__ == "__main__":
 
 		# Train agent after collecting sufficient data
 		if t >= args.start_timesteps:
-			policy.train(replay_buffer, args.batch_size*2)
+			policy.train(replay_buffer, args.batch_size)
 		
 		# End of episode handling
 		done = True if episode_timesteps >= env._max_episode_steps else done
@@ -215,13 +220,13 @@ if __name__ == "__main__":
 			evaluation, success = eval_policy(policy, args.env, args.seed, eval_episodes=10, evaluate=evaluate, freq=comput_freq)
 			evaluations.append(evaluation)
 			successes.append(success)
-			np.save(f"./results_expD3_8/{file_name}", evaluations)
-			np.save(f"./results_expD3_8/{file_name}_s", successes)
-			np.save(f"./results_expD3_8/{file_name}_t", target_reached / (episode_num+1))
+			np.save(f"./results/{file_name}", evaluations)
+			np.save(f"./results/{file_name}_s", successes)
+			np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
 			#print("---------------------------------------------------------------------")
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")
 			#print("---------------------------------------------------------------------")
 
 		# Save final policy if successful
-		if success == 10: policy.save(f"./models_expD3_8/{file_name}")
+		if success == 10: policy.save(f"./models/{file_name}")

@@ -83,12 +83,60 @@ def reward_2(p, p_g, prev, d, w):
 
     return reward, terminated
 
+def reward_3(p, p_g, prev, d, w):
+    reward = 0
+    terminated = False
+    
+    # Potential function based on distance and position
+    def potential(pos):
+        dist_to_goal = np.linalg.norm(pos - p_g)
+        # Add penalty for being close to obstacle center
+        dist_to_obstacle = np.linalg.norm(pos)
+        return -2 * dist_to_goal + 1 / (1 + dist_to_obstacle)
+    
+    # Reward based on improvement in potential
+    reward += 50 * (potential(p) - potential(prev))
+    
+    # Terminal conditions
+    if np.abs(p[0]) <= d/2 and np.abs(p[1]) <= w/2:
+        reward -= 10
+        terminated = True
+    
+    if np.linalg.norm(p - p_g) <= 0.15:
+        reward += 1000
+        terminated = True
+    
+    return reward, terminated
+
+def reward_4(p, p_g, prev, d, w, episode_timesteps):
+    reward = 0
+    terminated = False
+
+    # Penalty for moving away from the target
+    if np.linalg.norm(p - p_g) >= np.linalg.norm(prev - p_g):
+        reward += -1
+    else:
+        reward += 1
+
+    # Penalty for hitting the obstacle
+    if np.abs(p[0]) <= d / 2 and np.abs(p[1]) <= w / 2:
+        reward += -10
+        terminated = True
+    
+    # Reward for reaching the target
+    if np.linalg.norm(p - p_g) <= 0.15:
+        reward += 15
+    
+    if episode_timesteps >= 500:
+        terminated = True
+
+    return reward, terminated
+  
 def is_within_bounds(p):
         # Check if the x and y components of self.p are within the map limits
         x= p[0]
         y= p[1]
         return -1.0 < x < 1.0 and -1.0 < y < 1.0
-
 
 class MobileRobotEnv(gym.Env):
     def __init__(self):
@@ -270,6 +318,9 @@ class MobileRobotEnv(gym.Env):
 
         # TEST 2
         reward, terminated = reward_2(self.p, self.p_g, prev, self.d, self.w)
+
+        # TEST 3
+        #reward, terminated = reward_3(self.p, self.p_g, prev, self.d, self.w)
 
         info = self._get_info()
 

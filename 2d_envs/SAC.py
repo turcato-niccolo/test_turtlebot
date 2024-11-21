@@ -16,7 +16,7 @@ class SAC(object):
                  policy="Gaussian",
                  target_update_interval=1,
                  automatic_entropy_tuning=True,
-                 hidden_size=256,
+                 hidden_size=64,
                  lr=3e-4):
 
         self.gamma = gamma
