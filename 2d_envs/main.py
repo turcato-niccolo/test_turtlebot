@@ -130,7 +130,7 @@ if __name__ == "__main__":
 			"policy": "Gaussian",                 	# Policy type (for SAC)
 			"target_update_interval": 1,          	# Frequency of target network updates
 			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
-			"hidden_size": 256,                   	# Size of hidden layers
+			"hidden_size": 64,                   	# Size of hidden layers
 			"lr": 3e-4                            	# Learning rate
 		}
 		policy = SAC.SAC(**kwargs)
