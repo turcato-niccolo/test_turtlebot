@@ -73,7 +73,9 @@ class Critic(nn.Module):
 
 		q1 = F.relu(self.l1(sa))
 		q1 = F.relu(self.l2(q1))
-		q1 = self.l3(q1)
+		q1 = F.relu(self.l3(q1))
+		q1 = F.relu(self.l4(q1))
+		q1 = self.l5(q1)
 		return q1
 
 
