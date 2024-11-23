@@ -15,17 +15,21 @@ class Actor(nn.Module):
 	def __init__(self, state_dim, action_dim, max_action):
 		super(Actor, self).__init__()
 
-		self.l1 = nn.Linear(state_dim, 64)
-		self.l2 = nn.Linear(64, 64)
-		self.l3 = nn.Linear(64, action_dim)
-
+		self.l1 = nn.Linear(state_dim, 32)
+		self.l2 = nn.Linear(32, 32)
+		self.l3 = nn.Linear(32, 32)
+		self.l4 = nn.Linear(32, 32)
+		self.l5 = nn.Linear(32, action_dim)
+		
 		self.max_action = max_action
 
-
+	
 	def forward(self, state):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
-		return self.max_action * torch.tanh(self.l3(a))
+		a = F.relu(self.l3(a))
+		a = F.relu(self.l4(a))
+		return self.max_action * torch.tanh(self.l5(a))
 
 
 class Critic(nn.Module):
@@ -33,14 +37,18 @@ class Critic(nn.Module):
 		super(Critic, self).__init__()
 
 		# Q1 architecture
-		self.l1 = nn.Linear(state_dim + action_dim, 64)
-		self.l2 = nn.Linear(64, 64)
-		self.l3 = nn.Linear(64, 1)
+		self.l1 = nn.Linear(state_dim + action_dim, 32)
+		self.l2 = nn.Linear(32, 32)
+		self.l3 = nn.Linear(32, 32)
+		self.l4 = nn.Linear(32, 32)
+		self.l5 = nn.Linear(32, 1)
 
 		# Q2 architecture
-		self.l4 = nn.Linear(state_dim + action_dim, 64)
-		self.l5 = nn.Linear(64, 64)
-		self.l6 = nn.Linear(64, 1)
+		self.l6 = nn.Linear(state_dim + action_dim, 32)
+		self.l7 = nn.Linear(32, 32)
+		self.l8 = nn.Linear(32, 32)
+		self.l9 = nn.Linear(32, 32)
+		self.l10 = nn.Linear(32, 1)
 
 
 	def forward(self, state, action):
@@ -48,11 +56,15 @@ class Critic(nn.Module):
 
 		q1 = F.relu(self.l1(sa))
 		q1 = F.relu(self.l2(q1))
-		q1 = self.l3(q1)
+		q1 = F.relu(self.l3(q1))
+		q1 = F.relu(self.l4(q1))
+		q1 = self.l5(q1)
 
-		q2 = F.relu(self.l4(sa))
-		q2 = F.relu(self.l5(q2))
-		q2 = self.l6(q2)
+		q2 = F.relu(self.l6(sa))
+		q2 = F.relu(self.l7(q2))
+		q2 = F.relu(self.l8(q2))
+		q2 = F.relu(self.l9(q2))
+		q2 = self.l10(q2)
 		return q1, q2
 
 

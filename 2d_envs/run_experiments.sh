@@ -36,7 +36,7 @@ current_jobs=0  # Counter for current number of jobs
 for ((i=0;i<10;i+=1))
 do
     python3 main.py \
-    --policy "ExpD3" \
+    --policy "TD3" \
     --env "MR-env" \
     --seed $i &  # Run in background
 
