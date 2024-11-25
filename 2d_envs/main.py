@@ -59,7 +59,8 @@ if __name__ == "__main__":
 	parser.add_argument("--eval_freq", default=5e3, type=int)       	# How often (time steps) we evaluate
 	parser.add_argument("--max_timesteps", default=5e5, type=int) 		# Max time steps to run environment
 	parser.add_argument("--expl_noise", default=0.3, type=float)    	# Std of Gaussian exploration noise
-	parser.add_argument("--batch_size", default=64, type=int)      		# Batch size for both actor and critic
+	parser.add_argument("--batch_size", default=256, type=int)      	# Batch size for both actor and critic
+	parser.add_argument("--hidden_size", default=256, type=int)			# Hidden layers size
 	parser.add_argument("--discount", default=0.99, type=float)     	# Discount factor
 	parser.add_argument("--tau", default=0.005, type=float)         	# Target network update rate
 	parser.add_argument("--policy_noise", default=0.2)              	# Noise added to target policy during critic update
@@ -111,16 +112,16 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
-		comput_freq = 1/11 # 11Hz
+		comput_freq = 1/1 # 11Hz
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
-		comput_freq = 1/10 # 10Hz
+		comput_freq = 1/1 # 10Hz
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
-		comput_freq = 1/16 # 16Hz
+		comput_freq = 1/2 # 16Hz
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
-		comput_freq = 1/6 # 6Hz
+		comput_freq = 1/0.5 # 6Hz
 		kwargs = {
 			"num_inputs": state_dim,             	# The state dimension
 			"action_space": env.action_space,     	# The action space object
@@ -130,7 +131,7 @@ if __name__ == "__main__":
 			"policy": "Gaussian",                 	# Policy type (for SAC)
 			"target_update_interval": 1,          	# Frequency of target network updates
 			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
-			"hidden_size": 32,                   	# Size of hidden layers
+			#"hidden_size": 256,                   	# Size of hidden layers
 			"lr": 3e-4                            	# Learning rate
 		}
 		policy = SAC.SAC(**kwargs)
@@ -158,9 +159,9 @@ if __name__ == "__main__":
 	episode_num = 0
 	target_reached = 0
 
-	print("----------------------------------------------------------")
-	print(f"Policy: {args.policy}, Freq: {1/comput_freq} Hz, Env: {args.env}, Seed: {args.seed}")
-	print("----------------------------------------------------------")
+	print("--------------------------------------------------------------------------------------")
+	print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {1/comput_freq} Hz, Env: {args.env}, Seed: {args.seed}")
+	print("--------------------------------------------------------------------------------------")
 
 	# Training loop
 	for t in trange(int(args.max_timesteps)):

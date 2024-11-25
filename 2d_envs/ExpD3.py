@@ -12,14 +12,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Actor(nn.Module):
-	def __init__(self, state_dim, action_dim, max_action):
+	def __init__(self, state_dim, action_dim, max_action, hidden_size):
 		super(Actor, self).__init__()
 
-		self.l1 = nn.Linear(state_dim, 32)
-		self.l2 = nn.Linear(32, 32)
-		self.l3 = nn.Linear(32, 32)
-		self.l4 = nn.Linear(32, 32)
-		self.l5 = nn.Linear(32, action_dim)
+		self.l1 = nn.Linear(state_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, action_dim)
 		
 		self.max_action = max_action
 
@@ -27,28 +25,22 @@ class Actor(nn.Module):
 	def forward(self, state):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
-		a = F.relu(self.l3(a))
-		a = F.relu(self.l4(a))
-		return self.max_action * torch.tanh(self.l5(a))
+		return self.max_action * torch.tanh(self.l3(a))
 
 
 class Critic(nn.Module):
-	def __init__(self, state_dim, action_dim):
+	def __init__(self, state_dim, action_dim, hidden_size):
 		super(Critic, self).__init__()
 
-		self.l1 = nn.Linear(state_dim + action_dim, 32)
-		self.l2 = nn.Linear(32, 32)
-		self.l3 = nn.Linear(32, 32)
-		self.l4 = nn.Linear(32, 32)
-		self.l5 = nn.Linear(32, 1)
+		self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, 1)
 
 
 	def forward(self, state, action):
 		q = F.relu(self.l1(torch.cat([state, action], 1)))
 		q = F.relu(self.l2(q))
-		q = F.relu(self.l3(q))
-		q = F.relu(self.l4(q))
-		return self.l5(q)
+		return self.l3(q)
 
 class DDPG(object):
 	def __init__(
@@ -56,24 +48,25 @@ class DDPG(object):
 			state_dim,
 			action_dim,
 			max_action,
+			hidden_size = 256,
 			discount=0.99,
 			tau=0.005,
 			policy_freq=2,
-			 policy_noise=0.2,
-			 noise_clip=0.5,
-			 OVER=2.,
-			 UNDER=1.,
+			policy_noise=0.2,
+			noise_clip=0.5,
+			OVER=2.,
+			UNDER=1.,
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip
 		self.policy_noise = policy_noise
 		self.total_it = 0
 		self.policy_freq = policy_freq
-		self.actor = Actor(state_dim, action_dim, max_action).to(device)
+		self.actor = Actor(state_dim, action_dim, max_action, hidden_size).to(device)
 		self.actor_target = copy.deepcopy(self.actor)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
-		self.critic = Critic(state_dim, action_dim).to(device)
+		self.critic = Critic(state_dim, action_dim, hidden_size).to(device)
 		self.critic_target = copy.deepcopy(self.critic)
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
