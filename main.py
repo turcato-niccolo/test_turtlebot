@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import argparse
 import os
+from gym import spaces
 
 import tqdm
 
@@ -49,7 +50,11 @@ if __name__ == "__main__":
 
     state_dim = 6
     action_dim = 2
-    action_space = (action_dim,)
+
+    # Define the action bounds
+    action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
+    action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
+    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     kwargs = {

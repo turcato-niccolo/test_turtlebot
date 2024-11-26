@@ -29,6 +29,7 @@ class SAC(object):
 
         # Check for cuda device
         self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+        self.device = "cpu"
         '''
         # Check for apple metal device
         if torch.backends.mps.is_available():
