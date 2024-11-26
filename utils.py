@@ -2,10 +2,10 @@ import warnings
 
 import numpy as np
 import torch
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
-from bayes_opt import BayesianOptimization
-from bayes_opt.util import acq_max, UtilityFunction
+#from sklearn.gaussian_process import GaussianProcessRegressor
+#from sklearn.gaussian_process.kernels import RBF
+#from bayes_opt import BayesianOptimization
+#from bayes_opt.util import acq_max, UtilityFunction
 
 
 class ReplayBuffer(object):
@@ -75,7 +75,7 @@ class FunctionBuffer():
         else:
             return self.memory[:self.position, :self.input_dim], self.memory[:self.position, self.input_dim:]
 
-
+'''
 class BayesianOpt(BayesianOptimization):
 
     def __init__(self, f, pbounds, constraint=None, random_state=None, verbose=2, bounds_transformer=None,
@@ -163,3 +163,4 @@ class BiasSelectorBayesianOpt():
         self.moving_avg += self.alpha * residual
         self.optimizer.register(point, residual)  # / np.abs(self.moving_avg))
     # relative displacement from mov avg
+'''
