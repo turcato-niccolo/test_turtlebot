@@ -81,7 +81,7 @@ if __name__ == "__main__":
     elif 'SAC' in args.policy:
         policy = SAC.SAC(kwargs["state_dim"], action_space)
     elif 'ExpD3' in args.policy:
-        policy = ExpD3.OurDDPG(**kwargs)
+        policy = ExpD3.DDPG(**kwargs)
     else:
         raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
