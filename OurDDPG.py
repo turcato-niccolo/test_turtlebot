@@ -4,20 +4,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+cuda_available = torch.cuda.is_available()
+device = torch.device("cuda" if cuda_available else "cpu")
+#print(f"CUDA Available: {cuda_available}. Version: {torch.version.cuda}")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Re-tuned version of Deep Deterministic Policy Gradients (DDPG)
 # Paper: https://arxiv.org/abs/1509.02971
 
 
 class Actor(nn.Module):
-	def __init__(self, state_dim, action_dim, max_action):
+	def __init__(self, state_dim, action_dim, max_action, hidden_size):
 		super(Actor, self).__init__()
 
-		self.l1 = nn.Linear(state_dim, 128)
-		self.l2 = nn.Linear(128, 128)
-		self.l3 = nn.Linear(128, action_dim)
+		self.l1 = nn.Linear(state_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, action_dim)
 		
 		self.max_action = max_action
 
@@ -29,12 +31,12 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-	def __init__(self, state_dim, action_dim):
+	def __init__(self, state_dim, action_dim, hidden_size):
 		super(Critic, self).__init__()
 
-		self.l1 = nn.Linear(state_dim + action_dim, 128)
-		self.l2 = nn.Linear(128, 128)
-		self.l3 = nn.Linear(128, 1)
+		self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, 1)
 
 
 	def forward(self, state, action):
@@ -44,12 +46,12 @@ class Critic(nn.Module):
 
 
 class DDPG(object):
-	def __init__(self, state_dim, action_dim, max_action, discount=0.99, tau=0.005, *args, **kargs):
-		self.actor = Actor(state_dim, action_dim, max_action).to(device)
+	def __init__(self, state_dim, action_dim, max_action, discount=0.99, tau=0.005, hidden_size=32, *args, **kargs):
+		self.actor = Actor(state_dim, action_dim, max_action, hidden_size).to(device)
 		self.actor_target = copy.deepcopy(self.actor)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
-		self.critic = Critic(state_dim, action_dim).to(device)
+		self.critic = Critic(state_dim, action_dim, hidden_size).to(device)
 		self.critic_target = copy.deepcopy(self.critic)
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
@@ -103,14 +105,22 @@ class DDPG(object):
 		
 		torch.save(self.actor.state_dict(), filename + "_actor")
 		torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
-
-
+	
 	def load(self, filename):
-		self.critic.load_state_dict(torch.load(filename + "_critic"))
-		self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+		self.critic.load_state_dict(torch.load(filename + "_critic", map_location=torch.device('cpu')))
+		self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer", map_location=torch.device('cpu')))
 		self.critic_target = copy.deepcopy(self.critic)
 
-		self.actor.load_state_dict(torch.load(filename + "_actor"))
-		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+		self.actor.load_state_dict(torch.load(filename + "_actor", map_location=torch.device('cpu')))
+		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer", map_location=torch.device('cpu')))
 		self.actor_target = copy.deepcopy(self.actor)
+
+	# def load(self, filename):
+	# 	self.critic.load_state_dict(torch.load(filename + "_critic"))
+	# 	self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+	# 	self.critic_target = copy.deepcopy(self.critic)
+
+	# 	self.actor.load_state_dict(torch.load(filename + "_actor"))
+	# 	self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+	# 	self.actor_target = copy.deepcopy(self.actor)
 		

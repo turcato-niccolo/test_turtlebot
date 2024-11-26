@@ -21,7 +21,8 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--max_timesteps", default=1e3, type=int)   # Max time steps to run environment
-    parser.add_argument("--batch_size", default=128, type=int)      # Batch size for both actor and critic
+    parser.add_argument("--batch_size", default=64, type=int)       # Batch size for both actor and critic
+    parser.add_argument("--hidden_size", default=64, type=int)	    # Hidden layers size
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)         # Target network update rate
     parser.add_argument("--policy_noise", default=0.2)              # Noise added to target policy during critic update

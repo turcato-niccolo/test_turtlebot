@@ -1,4 +1,5 @@
 import os
+import copy
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
@@ -26,7 +27,15 @@ class SAC(object):
         self.target_update_interval = target_update_interval
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
+        # Check for cuda device
         self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+        '''
+        # Check for apple metal device
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")  # Use MPS on supported Macs
+        else:
+            self.device = torch.device("cpu")  # Fallback to CPU
+        '''
 
         self.critic = QNetwork(num_inputs, action_space.shape[0], hidden_size).to(device=self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr)
@@ -63,13 +72,14 @@ class SAC(object):
         self.updates += 1
         # Sample a batch from memory
         state_batch, action_batch, next_state_batch, reward_batch, mask_batch = memory.sample(batch_size=batch_size)
-
-        """state_batch = torch.FloatTensor(state_batch).to(self.device)
+        '''
+        # Convert to tensor and move to device
+        state_batch = torch.FloatTensor(state_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
         reward_batch = torch.FloatTensor(reward_batch).to(self.device)
-        mask_batch = torch.FloatTensor(mask_batch).to(self.device)"""
-
+        mask_batch = torch.FloatTensor(mask_batch).to(self.device)
+        '''
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
@@ -113,41 +123,32 @@ class SAC(object):
             soft_update(self.critic_target, self.critic, self.tau)
 
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
+    
+    def save(self, filename):
+        torch.save(self.critic.state_dict(), filename + "_critic")
+        torch.save(self.critic_target.state_dict(), filename + "_critic_target")
+        torch.save(self.critic_optim.state_dict(), filename + "_critic_optimizer")
+        
+        torch.save(self.policy.state_dict(), filename + "_actor")
+        torch.save(self.policy_optim.state_dict(), filename + "_actor_optimizer")
+    
+    def load(self, filename, evaluate=False):
+        self.critic.load_state_dict(torch.load(filename + "_critic"))
+        self.critic_optim.load_state_dict(torch.load(filename + "_critic_optimizer"))
+        self.critic_target.load_state_dict(torch.load(filename + "_critic_target"))
+        
+        self.policy.load_state_dict(torch.load(filename + "_actor"))
+        self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.actor_target = copy.deepcopy(self.actor)
 
-    # Save model parameters
-    def save_checkpoint(self, env_name, suffix="", ckpt_path=None):
-        if not os.path.exists('checkpoints/'):
-            os.makedirs('checkpoints/')
-        if ckpt_path is None:
-            ckpt_path = "checkpoints/sac_checkpoint_{}_{}".format(env_name, suffix)
-        print('Saving models to {}'.format(ckpt_path))
-        torch.save({'policy_state_dict': self.policy.state_dict(),
-                    'critic_state_dict': self.critic.state_dict(),
-                    'critic_target_state_dict': self.critic_target.state_dict(),
-                    'critic_optimizer_state_dict': self.critic_optim.state_dict(),
-                    'policy_optimizer_state_dict': self.policy_optim.state_dict()}, ckpt_path)
-
-    # Load model parameters
-    def load_checkpoint(self, ckpt_path, evaluate=False):
-        print('Loading models from {}'.format(ckpt_path))
-        if ckpt_path is not None:
-            checkpoint = torch.load(ckpt_path)
-            self.policy.load_state_dict(checkpoint['policy_state_dict'])
-            self.critic.load_state_dict(checkpoint['critic_state_dict'])
-            self.critic_target.load_state_dict(checkpoint['critic_target_state_dict'])
-            self.critic_optim.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-            self.policy_optim.load_state_dict(checkpoint['policy_optimizer_state_dict'])
-
-            if evaluate:
-                self.policy.eval()
-                self.critic.eval()
-                self.critic_target.eval()
-            else:
-                self.policy.train()
-                self.critic.train()
-                self.critic_target.train()
-
-
+        if evaluate:
+            self.policy.eval()
+            self.critic.eval()
+            self.critic_target.eval()
+        else:
+            self.policy.train()
+            self.critic.train()
+            self.critic_target.train()
 
 
 LOG_SIG_MAX = 2

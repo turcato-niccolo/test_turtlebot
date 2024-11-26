@@ -12,12 +12,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Actor(nn.Module):
-	def __init__(self, state_dim, action_dim, max_action):
+	def __init__(self, state_dim, action_dim, max_action, hidden_size):
 		super(Actor, self).__init__()
 
-		self.l1 = nn.Linear(state_dim, 256)
-		self.l2 = nn.Linear(256, 256)
-		self.l3 = nn.Linear(256, action_dim)
+		self.l1 = nn.Linear(state_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, action_dim)
 		
 		self.max_action = max_action
 
@@ -29,12 +29,12 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-	def __init__(self, state_dim, action_dim):
+	def __init__(self, state_dim, action_dim, hidden_size):
 		super(Critic, self).__init__()
 
-		self.l1 = nn.Linear(state_dim + action_dim, 256)
-		self.l2 = nn.Linear(256, 256)
-		self.l3 = nn.Linear(256, 1)
+		self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
+		self.l2 = nn.Linear(hidden_size, hidden_size)
+		self.l3 = nn.Linear(hidden_size, 1)
 
 
 	def forward(self, state, action):
@@ -48,24 +48,25 @@ class DDPG(object):
 			state_dim,
 			action_dim,
 			max_action,
+			hidden_size = 256,
 			discount=0.99,
 			tau=0.005,
 			policy_freq=2,
-			 policy_noise=0.2,
-			 noise_clip=0.5,
-			 OVER=1.,
-			 UNDER=1.,
+			policy_noise=0.2,
+			noise_clip=0.5,
+			OVER=2.,
+			UNDER=1.,
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip
 		self.policy_noise = policy_noise
 		self.total_it = 0
 		self.policy_freq = policy_freq
-		self.actor = Actor(state_dim, action_dim, max_action).to(device)
+		self.actor = Actor(state_dim, action_dim, max_action, hidden_size).to(device)
 		self.actor_target = copy.deepcopy(self.actor)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
-		self.critic = Critic(state_dim, action_dim).to(device)
+		self.critic = Critic(state_dim, action_dim, hidden_size).to(device)
 		self.critic_target = copy.deepcopy(self.critic)
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
@@ -141,14 +142,22 @@ class DDPG(object):
 		
 		torch.save(self.actor.state_dict(), filename + "_actor")
 		torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
-
-
+	
 	def load(self, filename):
-		self.critic.load_state_dict(torch.load(filename + "_critic"))
-		self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+		self.critic.load_state_dict(torch.load(filename + "_critic", map_location=torch.device('cpu')))
+		self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer", map_location=torch.device('cpu')))
 		self.critic_target = copy.deepcopy(self.critic)
 
-		self.actor.load_state_dict(torch.load(filename + "_actor"))
-		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+		self.actor.load_state_dict(torch.load(filename + "_actor", map_location=torch.device('cpu')))
+		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer", map_location=torch.device('cpu')))
 		self.actor_target = copy.deepcopy(self.actor)
+
+	# def load(self, filename):
+	# 	self.critic.load_state_dict(torch.load(filename + "_critic"))
+	# 	self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+	# 	self.critic_target = copy.deepcopy(self.critic)
+
+	# 	self.actor.load_state_dict(torch.load(filename + "_actor"))
+	# 	self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+	# 	self.actor_target = copy.deepcopy(self.actor)
 		
