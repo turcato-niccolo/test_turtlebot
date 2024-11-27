@@ -10,6 +10,7 @@ from std_srvs.srv import Empty
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 import tf.transformations
+import pickle
 
 import ExpD3
 import OurDDPG
@@ -22,9 +23,9 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [2.0, np.pi/2]
+        self.MAX_VEL = [.5, np.pi/2]
         self.BUFFER_SIZE = 10**5
-        self.BATCH_SIZE = 256
+        self.BATCH_SIZE = 128
         self.TRAINING_START_SIZE = 10**3
         self.SAMPLE_FREQ = 1 / 10
         self.MAX_STEP_EPISODE = 500
@@ -38,7 +39,7 @@ class RobotTrainer:
         self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-1.0, 0.0])
+        self.HOME = np.array([-0.9, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -117,7 +118,7 @@ class RobotTrainer:
                 self.ACTION_DIM, 
                 max_size=self.BUFFER_SIZE
             )
-            self.policy = ExpD3.DDPG(self.STATE_DIM, self.ACTION_DIM, max_action=1)
+            self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
             rospy.loginfo("RL components initialized")
         except Exception as e:
             rospy.logerr(f"RL initialization failed: {e}")
@@ -206,6 +207,8 @@ class RobotTrainer:
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
+            if np.isnan(action[1]):
+                print(f"Select action: {action}")
             # Add random noise for exploration
             action += np.random.normal(0, 0.3, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
@@ -259,6 +262,9 @@ class RobotTrainer:
             terminated = True
             self.success_count += 1
         
+        if np.isnan(reward):
+            print(f"Reward Nan: {reward}, {state}, {next_state}")
+        
         return reward, terminated
 
     def log_episode_stats(self, episode_time):
@@ -299,6 +305,10 @@ class RobotTrainer:
         # Save model
         self.policy.save(f"./models/ExpD3_0")
 
+        # Save buffer
+        with open('replay_buffer.pkl', 'wb') as f:
+            pickle.dump(self.replay_buffer, f)
+
     def reset(self):
         """Reset method with statistics"""
         if self.start_time is not None: # Episode finished
@@ -313,6 +323,7 @@ class RobotTrainer:
             self.save_stats() # Save stats
         
         try:
+            '''
             # Reset simulation
             self.reset_simulation()
             # Delay for simulation reset
@@ -322,6 +333,7 @@ class RobotTrainer:
             if not self.spawn_robot_random():
                 rospy.logerr("Failed to reset episode - spawn failed")
                 return
+            '''
             
             # Reset episode variables
             self.start_time = rospy.get_time()
@@ -349,7 +361,7 @@ class RobotTrainer:
         Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
         
         # Small margin to detect boundary approach
-        MARGIN = 0.15
+        MARGIN = 0.
         
         # Check if robot is near boundaries
         at_x_min = x <= X_MIN + MARGIN
@@ -389,7 +401,7 @@ class RobotTrainer:
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
         try:
-            rospy.loginfo("Initiating come-back-home behavior.")
+            rospy.loginfo("Coming home.")
 
             # Ensure home position is defined
             if self.HOME is None:
@@ -401,28 +413,37 @@ class RobotTrainer:
                 rospy.logerr("Goal position is not set.")
                 return
 
-            # Get the current state from the odometry message
-            next_state = self.get_state_from_odom(msg)
             
-            # Current position (x, y) and the home position
-            current_position = np.array(self.old_state[:2])  # Assuming old_state contains the last [x, y]
+            next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
+            current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
             home_position = np.array(self.HOME)
-            
-            # Calculate distance to home
-            distance_to_home = np.linalg.norm(current_position - home_position)
-
-            # Get the robot's current yaw angle (orientation)
-            current_yaw = self.old_state[2]  # Assuming the yaw angle is part of the old_state (index 2)
-
-            # Calculate the desired angle to home
-            desired_angle_to_home = np.arctan2(home_position[1] - current_position[1], home_position[0] - current_position[0])
-
-            # Calculate the angle difference (heading error)
-            angle_error = desired_angle_to_home - current_yaw
-            angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+            distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
+            current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
+            direction = home_position - current_position                            # Calculate Direction
+            desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
+            angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
+            angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
             # If the robot is far from home and needs to correct its orientation
-            if distance_to_home > self.GOAL_DIST:
+            if distance_to_home > 0.05:
+
+                # Calculate the distance to the goal (r)
+                r = distance_to_home
+                # Calculate the angle to the goal relative to the robot's orientation (gamma)
+                gamma = angle_error
+                # Calculate the heading correction (delta)
+                delta = gamma + current_yaw
+                
+                # Control param
+                k1, k2, k3 = 0.6, 0.4, 0.1
+
+                # Compute the linear velocity (v)
+                linear_velocity = k1 * r * np.cos(gamma)
+                
+                # Compute the angular velocity (omega)
+                angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
+
+                '''
                 # First, rotate the robot to face the home position if not aligned
                 if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
                     angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
@@ -439,7 +460,7 @@ class RobotTrainer:
                     # Set angular velocity to 0, since we're aligned with the target
                     angular_velocity = 0.0
 
-                    rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
+                    rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
 
                 # Publish velocity commands to move the robot
                 self.publish_velocity([linear_velocity, angular_velocity])
@@ -447,7 +468,7 @@ class RobotTrainer:
                 
             else:
                 # If we're close enough to the home position, stop the robot
-                self.publish_velocity([0, 0])  # Stop moving
+                #self.publish_velocity([0, 0])  # Stop moving
                 rospy.loginfo("Robot has returned home.")
 
                 # Now, reorient the robot towards the goal position
@@ -512,16 +533,20 @@ class RobotTrainer:
         allowed_vel, at_boundary = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
 
         action = self.select_action(next_state)                 # Select action
+
+        if np.isnan(action[1]) or np.isnan(action[0]):
+            action = [0, 0]
+        
         temp_action = action
 
         if at_boundary:
             # Robot is at boundary, stop and turn inward
-            if action[0] > 0.0:
-                temp_action[0] = min(action[0], allowed_vel)    # Limit linear velocity
-            else:
-                temp_action[0] = 0.0
+            temp_action[0] = 0        # Limit linear velocity
+            rospy.loginfo(f"At Boundary. Training loop: {action}")
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
+
+        if next_state[0] > 2 and next_state[1] > 2: done = True # come home
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -540,6 +565,7 @@ class RobotTrainer:
             
         # Train policy
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
+            rospy.loginfo("Training behavior.")
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
         
         # Update state and action
@@ -549,6 +575,7 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
+            rospy.loginfo("Initiating come-back-home behavior.")
             self.reset()
         
         '''
@@ -572,24 +599,22 @@ class RobotTrainer:
             rospy.logerr(f"Error in callback: {e}")
 
 def main():
-    try:
-        # Create data folders
-        if not os.path.exists("./results"):
-            os.makedirs("./results")
+    # Create data folders
+    if not os.path.exists("./results"):
+        os.makedirs("./results")
 
-        if not os.path.exists("./models"):
-            os.makedirs("./models")
-        
-        # Initialize the robot trainer
-        trainer = RobotTrainer()
-        trainer.reset()
-        
-        # Start the training loop
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        rospy.loginfo("Training interrupted")
-    except Exception as e:
-        rospy.logerr(f"Training failed: {e}")
+    if not os.path.exists("./models"):
+        os.makedirs("./models")
+    
+    torch.manual_seed(100)
+
+    # Initialize the robot trainer
+    trainer = RobotTrainer()
+    trainer.reset()
+    trainer.publish_velocity([0.0,0.0]) # Stop the robot
+    
+    # Start the training loop
+    rospy.spin()
 
 if __name__ == "__main__":
     main()
