@@ -101,6 +101,8 @@ if __name__ == "__main__":
 		"max_action": max_action,
 		"discount": args.discount,
 		"tau": args.tau,
+		"batch_size": args.batch_size,
+        "hidden_size": args.hidden_size,
 	}
 
 	evaluate = False
