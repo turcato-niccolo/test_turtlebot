@@ -51,10 +51,10 @@ class DDPG(object):
 			discount=0.99,
 			tau=0.005,
 			policy_freq=2,
-			 policy_noise=0.2,
-			 noise_clip=0.5,
-			 OVER=1.,
-			 UNDER=1.,
+			policy_noise=0.2,
+			noise_clip=0.5,
+			OVER=1.,
+			UNDER=1.,
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip

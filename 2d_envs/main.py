@@ -49,6 +49,74 @@ def eval_policy(policy, env_name, seed, eval_episodes=10, evaluate=False, freq=1
 	# print("---------------------------------------------------------------------")
 	return avg_reward, target_reached
 
+def get_comput_freq(policy, batch_size, hidden_size):
+    """
+    Determines the computation frequency based on the policy, batch size, and hidden size.
+
+    Args:
+        policy (str): The name of the policy (e.g., "TD3", "ExpD3", etc.).
+        batch_size (int): The batch size parameter.
+        hidden_size (int): The hidden size parameter.
+
+    Returns:
+        float: The computation frequency (Hz).
+    """
+    if policy == "TD3":
+        if batch_size == 32 and hidden_size == 32:
+            return 1/20  # ~20 Hz
+        elif batch_size == 64 and hidden_size == 32:
+            return 1/17  # ~17 Hz
+        elif batch_size == 128 and hidden_size == 32:
+            return 1/12  # ~12 Hz
+        elif batch_size == 32 and hidden_size == 64:
+            return 1/13  # ~13 Hz
+        elif batch_size == 64 and hidden_size == 64:
+            return 1/9  # ~9 Hz
+        elif batch_size == 128 and hidden_size == 64:
+            return 1/5.9  # ~5.9 Hz
+    elif policy == "OurDDPG":
+        if batch_size == 32 and hidden_size == 32:
+            return 1/20  
+        elif batch_size == 64 and hidden_size == 32:
+            return 1/17 
+        elif batch_size == 128 and hidden_size == 32:
+            return 1/12 
+        elif batch_size == 32 and hidden_size == 64:
+            return 1/13.7 
+        elif batch_size == 64 and hidden_size == 64:
+            return 1/9 
+        elif batch_size == 128 and hidden_size == 64:
+            return 1/5.8  
+    elif policy == "ExpD3":
+        if batch_size == 32 and hidden_size == 32:
+            return 1/26  # ~26 Hz
+        elif batch_size == 64 and hidden_size == 32:
+            return 1/22  # ~22 Hz
+        elif batch_size == 128 and hidden_size == 32:
+            return 1/16.8  # ~16.8 Hz
+        elif batch_size == 32 and hidden_size == 64:
+            return 1/17  # ~17 Hz
+        elif batch_size == 64 and hidden_size == 64:
+            return 1/12.7  # ~12.7 Hz
+        elif batch_size == 128 and hidden_size == 64:
+            return 1/8  # ~8 Hz
+    elif policy == "SAC":
+        if batch_size == 32 and hidden_size == 32:
+            return 1/20  
+        elif batch_size == 64 and hidden_size == 32:
+            return 1/17  
+        elif batch_size == 128 and hidden_size == 32:
+            return 1/12  
+        elif batch_size == 32 and hidden_size == 64:
+            return 1/13  
+        elif batch_size == 64 and hidden_size == 64:
+            return 1/9  
+        elif batch_size == 128 and hidden_size == 64:
+            return 1/5.9
+
+    # Default frequency if no specific case matches
+    return 1/10  # ~10 Hz
+
 if __name__ == "__main__":
 	
 	parser = argparse.ArgumentParser()
@@ -70,7 +138,7 @@ if __name__ == "__main__":
 	parser.add_argument("--load_model", default="")                 	# Model load file name, "" doesn't load, "default" uses file_name
 	args = parser.parse_args()
 
-	file_name = f"{args.policy}_{args.env}_{args.seed}"
+	file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.env}_{args.seed}"
 
 	if not os.path.exists("./results"):
 		os.makedirs("./results")
@@ -114,16 +182,16 @@ if __name__ == "__main__":
 		kwargs["policy_noise"] = args.policy_noise * max_action
 		kwargs["noise_clip"] = args.noise_clip * max_action
 		kwargs["policy_freq"] = args.policy_freq
-		comput_freq = 1/1 # 11Hz
+		comput_freq = get_comput_freq("TD3", args.batch_size, args.hidden_size)
 		policy = TD3.TD3(**kwargs)
 	elif args.policy == "OurDDPG":
-		comput_freq = 1/1 # 10Hz
+		comput_freq = get_comput_freq("OurDDPG", args.batch_size, args.hidden_size)
 		policy = OurDDPG.DDPG(**kwargs)
 	elif args.policy == "ExpD3":
-		comput_freq = 1/2 # 16Hz
+		comput_freq = get_comput_freq("ExpD3", args.batch_size, args.hidden_size)
 		policy = ExpD3.DDPG(**kwargs)
 	elif args.policy == "SAC":
-		comput_freq = 1/0.5 # 6Hz
+		comput_freq = get_comput_freq("SAC", args.batch_size, args.hidden_size)
 		kwargs = {
 			"num_inputs": state_dim,             	# The state dimension
 			"action_space": env.action_space,     	# The action space object
@@ -225,7 +293,7 @@ if __name__ == "__main__":
 			successes.append(success)
 			np.save(f"./results/{file_name}", evaluations)
 			np.save(f"./results/{file_name}_s", successes)
-			np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
+			#np.save(f"./results/{file_name}_t", target_reached / (episode_num+1))
 			#if args.save_model: policy.save(f"./models/{file_name}")
 			#print("---------------------------------------------------------------------")
 			#print(f"Percentage of success: {target_reached} / {episode_num+1}")

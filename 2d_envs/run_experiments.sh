@@ -1,8 +1,52 @@
 #!/bin/bash
 
-# Scripts to reproduce results
+# Define the batch sizes and hidden sizes to test
+batch_sizes=(32 64 128)
+hidden_sizes=(32 64)
 
-for ((i=0;i<10;i+=1))
+# Define the maximum number of parallel jobs
+max_jobs=10
+
+# Function to manage parallel jobs
+function wait_for_jobs {
+    while [ $(jobs -rp | wc -l) -ge $max_jobs ]; do
+        sleep 1
+    done
+}
+
+# Loop through the seeds
+for ((i=1; i<2; i+=1))
+do
+    # Loop through the batch sizes
+    for batch_size in "${batch_sizes[@]}"
+    do
+        # Loop through the hidden sizes
+        for hidden_size in "${hidden_sizes[@]}"
+        do
+            # Run the different policies
+            for policy in "OurDDPG" "ExpD3" "TD3"
+            do
+                # Ensure no more than max_jobs are running
+                wait_for_jobs
+
+                # Start the job
+                python3 main.py \
+                --policy $policy \
+                --batch_size $batch_size \
+                --hidden_size $hidden_size \
+                --env "MR-env" \
+                --seed $i &
+
+            done
+        done
+    done
+done
+
+# Wait for all remaining jobs to finish
+wait
+
+: << 'COMMENT'
+for ((i=0;i<2;i+=1))
 do
     #python3 main.py \
     #--policy "OurDDPG" \
@@ -27,7 +71,7 @@ do
 done
 
 
-: << 'COMMENT'
+
 # Script to reproduce results
 
 max_parallel=3  # Maximum number of parallel processes allowed
