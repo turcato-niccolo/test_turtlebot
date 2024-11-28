@@ -428,7 +428,7 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
-            # Calculate the distance to home (r)
+            '''# Calculate the distance to home (r)
             r = distance_to_home
             # Calculate the angle to the home relative to the robot's orientation (gamma)
             gamma = angle_error
@@ -439,9 +439,9 @@ class RobotTrainer:
             # Compute the linear velocity
             linear_velocity = k1 * r * np.cos(gamma)
             # Compute the angular velocity
-            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
+            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
 
-            '''
+            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
                 angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
@@ -458,7 +458,7 @@ class RobotTrainer:
                 # Set angular velocity to 0, since we're aligned with the target
                 #angular_velocity = 0.0
 
-                rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
+                rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
