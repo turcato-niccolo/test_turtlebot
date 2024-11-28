@@ -381,8 +381,8 @@ class RobotTrainer:
             return max_linear_vel, False
             
         # Calculate the direction vector pointing inward
-        target_x = self.GOAL[0]
-        target_y = self.GOAL[1]
+        target_x = 0
+        target_y = 0
         
         # Calculate angle to center of map
         angle_to_center = np.arctan2(target_y - y, target_x - x)
@@ -392,8 +392,8 @@ class RobotTrainer:
         angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
                             np.cos(angle_to_center - theta))
         
-        # Check if robot is pointing inward (within 45 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/4
+        # Check if robot is pointing inward (within 60 degrees of center direction)
+        pointing_inward = abs(angle_diff) < np.pi/3
         
         # Calculate allowed linear velocity
         if pointing_inward:
