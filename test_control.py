@@ -376,22 +376,22 @@ class RobotTrainer:
             return max_linear_vel, False
         
         # Calculate if the robot is pointing inward
-        if at_y_min: # Left boundary
+        if at_y_min: # Right boundary
             min = np.arctan2(X_MAX - x, Y_MIN - y)
             max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
             if theta > min and theta < max: return max_linear_vel, True
 
-        if at_y_max: # Right boundary
+        if at_y_max: # Left boundary
             min = np.arctan2(X_MIN - x, Y_MAX - y)
             max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
             if theta > min and theta < max: return max_linear_vel, True
 
-        if at_x_min:
+        if at_x_min: # Bottom boundary
             min = np.arctan2(Y_MAX - y, X_MIN - x)
             max = np.pi - np.arctan2(Y_MIN - y, X_MIN - x)
             if theta > min and theta < max: return max_linear_vel, True
 
-        if at_x_max:
+        if at_x_max: # Top Boundary
             min = np.arctan2(Y_MIN - y, X_MAX - x)
             max = np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
             if theta > min and theta < max: return max_linear_vel, True
