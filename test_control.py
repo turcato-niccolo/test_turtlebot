@@ -20,18 +20,21 @@ import SAC
 import utils
 
 class RobotTrainer:
-    def __init__(self, args, kwargs, action_space):
+    def __init__(self, args, kwargs, action_space, file_name):
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
         self.MAX_VEL = [.5, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
-        self.TRAINING_START_SIZE = 10**3
+        self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 10
         self.MAX_STEP_EPISODE = 150
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
-        self.EVAL_FREQ = 5000
+        self.EVAL_FREQ = args.eval_freq
+        self.expl_noise = args.exp_noise
+
+        self.file_name = file_name
         
         # Environment parameters
         self.GOAL = np.array([1.0, 0.0])
@@ -83,11 +86,11 @@ class RobotTrainer:
         }
         
         # Initialize ROS and RL components
-        self._initialize_system(args, kwargs, action_space)
+        self._initialize_system(args, kwargs, action_space, file_name)
 
-    def _initialize_system(self, args, kwargs, action_space):
+    def _initialize_system(self, args, kwargs, action_space, file_name):
         """Initialize both ROS and RL systems"""
-        self._initialize_rl(args, kwargs, action_space)
+        self._initialize_rl(args, kwargs, action_space, file_name)
         self._initialize_ros()
         rospy.loginfo("Robot Trainer initialized successfully")
 
@@ -111,7 +114,7 @@ class RobotTrainer:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
 
-    def _initialize_rl(self, args, kwargs, action_space):
+    def _initialize_rl(self, args, kwargs, action_space, file_name):
         """Initialize RL policy and replay buffer"""
         try:
             self.replay_buffer = utils.ReplayBuffer(
@@ -125,10 +128,29 @@ class RobotTrainer:
             elif 'TD3' in args.policy:
                 self.policy = TD3.TD3(**kwargs)
             elif 'SAC' in args.policy:
+                self.expl_noise = 0
                 self.policy = SAC.SAC(kwargs["state_dim"], action_space)
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
             
+            # Load model and data
+            if args.load_model != "":
+                policy_file = file_name if args.load_model == "default" else args.load_model
+
+                self.policy.load(f"./models/{policy_file}")
+
+                loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
+                self.episodes = loaded_data['Total_Episodes']
+                self.rewards = loaded_data['Total_Reward']
+                self.success = loaded_data['Success_Rate']
+                self.collisions = loaded_data['Collision_Rate']
+                self.training_time = loaded_data['Training_Time']
+                self.total_steps = loaded_data['Total_Steps']
+
+                self.episode_count = self.episodes[-1]
+                self.total_training_time = self.training_time[-1]
+            
+
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
             rospy.loginfo("RL components initialized")
         except Exception as e:
@@ -221,7 +243,7 @@ class RobotTrainer:
             if np.isnan(action[1]):
                 print(f"Select action: {action}")
             # Add random noise for exploration
-            action += np.random.normal(0, 0.3, size=self.ACTION_DIM)
+            action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
             action[0] = np.clip(action[0], 0, 1)
             # Clip the angular velocity to be between -1 and 1
@@ -305,17 +327,19 @@ class RobotTrainer:
         self.success.append(success_rate)
         self.collisions.append(collision_rate)
         self.training_time.append(self.total_training_time)
+
         # Save stats
         np.savez(
-            "./results/stats.npz", 
+            f"./results/stats_{self.file_name}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
             Success_Rate=self.success, 
             Collision_Rate=self.collisions,
-            Training_Time=self.training_time
+            Training_Time=self.training_time,
+            Total_Steps=self.total_steps
         )
         # Save model
-        self.policy.save(f"./models/ExpD3_0")
+        self.policy.save(f"./models/{self.file_name}")
 
         '''# Save buffer
         with open('replay_buffer.pkl', 'wb') as f:
@@ -634,7 +658,6 @@ def init():
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=5e3, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=5e3, type=int)       	        # How often (time steps) we evaluate
-    parser.add_argument("--max_timesteps", default=5e5, type=int) 		        # Max time steps to run environment
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
@@ -655,7 +678,7 @@ def init():
     parser.add_argument("--UNDER", default=1, type=float)
     args = parser.parse_args()
 
-
+    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.env}_{args.seed}"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -702,15 +725,19 @@ def init():
     if not os.path.exists("./models"):
         os.makedirs("./models")
     
-    return args, kwargs, action_space
+    print("--------------------------------------------------------------------------------------")
+    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {1/10} Hz, Env: {args.env}, Seed: {args.seed}")
+    print("--------------------------------------------------------------------------------------")
+    
+    return args, kwargs, action_space, file_name
 
 
 def main():
 
-    args, kargs, action_space = init()
+    args, kargs, action_space, file_name = init()
 
     # Initialize the robot trainer
-    trainer = RobotTrainer(args, kargs, action_space)
+    trainer = RobotTrainer(args, kargs, action_space, file_name)
     trainer.reset()
     trainer.publish_velocity([0.0,0.0]) # Stop the robot
     
