@@ -39,7 +39,7 @@ class RobotTrainer:
         self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-1, 0.0])
+        self.HOME = np.array([-0.9, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -375,15 +375,16 @@ class RobotTrainer:
         if not is_at_boundary:
             return max_linear_vel, False
         
-        # Calculate if the robot is pointing inward
+        '''# Calculate if the robot is pointing inward
         if at_y_min: # Right boundary
             min = np.arctan2(X_MAX - x, Y_MIN - y)
             max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
             if theta > min and theta < max: return max_linear_vel, True
 
         if at_y_max: # Left boundary
-            min = np.pi + np.arctan2(X_MIN - x, Y_MAX - y)
-            max = 2*np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
+            min = np.arctan2(Y_MAX - y, X_MIN - x)
+            max = 2*np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
+            if theta > min and theta < max: return max_linear_vel, True
 
         if at_x_min: # Bottom boundary
             min = np.arctan2(X_MIN - x, Y_MIN - y) - np.pi /2
@@ -395,7 +396,9 @@ class RobotTrainer:
             max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
             if theta > min and theta < max: return max_linear_vel, True
             
-        '''# Calculate the direction vector pointing inward
+        allowed_linear_vel = 0.0'''
+        
+        # Calculate the direction vector pointing inward
         target_x = 0
         target_y = 0
         
@@ -415,9 +418,9 @@ class RobotTrainer:
             allowed_linear_vel = max_linear_vel
         else:
             # Stop linear movement if pointing outward
-            allowed_linear_vel = 0.0'''
+            allowed_linear_vel = 0.0
         
-        return 0.0, True
+        return allowed_linear_vel, True
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
@@ -464,8 +467,8 @@ class RobotTrainer:
             
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
-                angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.1  # Stop moving forward while correcting orientation
+                angular_velocity = 1 * np.sign(angle_error)  # Rotate towards home
+                linear_velocity = 0.2  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -517,7 +520,7 @@ class RobotTrainer:
 
         # Rotate towards the goal if necessary
         if abs(angle_error) > 0.1:  # A threshold for alignment
-            angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards goal
+            angular_velocity = 1 * np.sign(angle_error)  # Rotate towards goal
             linear_velocity = 0.0  # Stop moving forward while rotating
             #rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
         else:
