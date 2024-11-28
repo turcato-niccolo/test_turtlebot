@@ -382,18 +382,17 @@ class RobotTrainer:
             if theta > min and theta < max: return max_linear_vel, True
 
         if at_y_max: # Left boundary
-            min = np.arctan2(X_MIN - x, Y_MAX - y)
-            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
-            if theta > min and theta < max: return max_linear_vel, True
+            min = np.pi + np.arctan2(X_MIN - x, Y_MAX - y)
+            max = 2*np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
 
         if at_x_min: # Bottom boundary
-            min = np.arctan2(Y_MAX - y, X_MIN - x)
-            max = np.pi - np.arctan2(Y_MIN - y, X_MIN - x)
+            min = np.arctan2(X_MIN - x, Y_MIN - y) - np.pi /2
+            max = np.pi - np.arctan2(Y_MAX - y, X_MIN - x) - np.pi /2
             if theta > min and theta < max: return max_linear_vel, True
 
         if at_x_max: # Top Boundary
-            min = np.arctan2(Y_MIN - y, X_MAX - x)
-            max = np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
+            min = np.pi/2 - np.arctan2(X_MAX - x, Y_MAX - y)
+            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
             if theta > min and theta < max: return max_linear_vel, True
             
         '''# Calculate the direction vector pointing inward
