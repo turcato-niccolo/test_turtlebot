@@ -11,7 +11,6 @@ from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 import tf.transformations
 import pickle
-import time
 
 import ExpD3
 import OurDDPG
@@ -24,12 +23,12 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [.5, np.pi/2]
+        self.MAX_VEL = [.5, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = 32
-        self.TRAINING_START_SIZE = 1 * 10**3
+        self.TRAINING_START_SIZE = 10**2
         self.SAMPLE_FREQ = 1 / 10
-        self.MAX_STEP_EPISODE = 500
+        self.MAX_STEP_EPISODE = 100
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = 5000
         
@@ -40,7 +39,7 @@ class RobotTrainer:
         self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-0.9, 0.0])
+        self.HOME = np.array([-1, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -87,8 +86,8 @@ class RobotTrainer:
 
     def _initialize_system(self):
         """Initialize both ROS and RL systems"""
-        self._initialize_rl()
         self._initialize_ros()
+        self._initialize_rl()
         rospy.loginfo("Robot Trainer initialized successfully")
 
     def _initialize_ros(self):
@@ -139,7 +138,7 @@ class RobotTrainer:
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.pose.pose.position.x
+        x = msg.pose.pose.position.x - 1.0 # TODO: piece of shit change because I'm lazy af
         y = msg.pose.pose.position.y
         
         # Get orientation
@@ -205,41 +204,30 @@ class RobotTrainer:
     
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
-        try:
-            if self.replay_buffer.size > self.TRAINING_START_SIZE:
-                # Get action from the policy (linear and angular velocities)
-                action = self.policy.select_action(np.array(state))
-                # Add random noise for exploration
-                action += np.random.normal(0, 0.3, size=self.ACTION_DIM)
-                # Clip the linear velocity to be between 0 and 1
-                action[0] = np.clip(action[0], 0, 1)
-                # Clip the angular velocity to be between -1 and 1
-                action[1] = np.clip(action[1], -1, 1)
-            else:
-                # Random action sampling
-                action = np.random.normal(0, 1, size=self.ACTION_DIM)
-                # Clip the linear velocity to be between 0 and 1
-                action[0] = np.clip(action[0], 0, 1)
-                # Clip the angular velocity to be between -1 and 1
-                action[1] = np.clip(action[1], -1, 1)
-            
-            if np.isnan(action).any():
-                rospy.logerr(f"NaN in policy action: {action}")
-                action = np.zeros(self.ACTION_DIM)
-
-        except Exception as e:
-            rospy.logerr(f"Error in action selection: {e}")
-            return np.zeros(self.ACTION_DIM)
+        if self.replay_buffer.size > self.TRAINING_START_SIZE:
+            # Get action from the policy (linear and angular velocities)
+            action = self.policy.select_action(np.array(state))
+            if np.isnan(action[1]):
+                print(f"Select action: {action}")
+            # Add random noise for exploration
+            action += np.random.normal(0, 0.3, size=self.ACTION_DIM)
+            # Clip the linear velocity to be between 0 and 1
+            action[0] = np.clip(action[0], 0, 1)
+            # Clip the angular velocity to be between -1 and 1
+            action[1] = np.clip(action[1], -1, 1)
+        else:
+            # Random action sampling
+            action = np.random.normal(0, 1, size=self.ACTION_DIM)
+            # Clip the linear velocity to be between 0 and 1
+            action[0] = np.clip(action[0], 0, 1)
+            # Clip the angular velocity to be between -1 and 1
+            action[1] = np.clip(action[1], -1, 1)
 
         return action
 
     def compute_reward(self, state, next_state):
         """Reward computation"""
 
-        if np.any(np.isnan(next_state)):
-            rospy.logerr("NaN detected in next_state")
-            return 0, True
-    
         p = np.array(next_state[:2])
         dist_to_goal = np.linalg.norm(p - self.GOAL)
         
@@ -277,24 +265,22 @@ class RobotTrainer:
         if np.isnan(reward):
             print(f"Reward Nan: {reward}, {state}, {next_state}")
         
-        reward = np.clip(reward, -1000, 1200)
-        
         return reward, terminated
 
-    def log_episode_stats(self):
+    def log_episode_stats(self, episode_time):
         """Log detailed episode statistics"""
-        success_rate = self.success_count / (self.episode_count+1) * 100
-        collision_rate = self.collision_count / (self.episode_count+1) * 100
+        success_rate = self.success_count / (self.episode_count + 1) * 100
+        collision_rate = self.collision_count / (self.episode_count + 1) * 100
         
-        rospy.loginfo("\n\n=== Episode Statistics ===")
+        rospy.loginfo("\n=== Episode Statistics ===")
         rospy.loginfo(f"Episode {self.episode_count}:")
-        #rospy.loginfo(f"Duration: {episode_time:.2f}s")
+        rospy.loginfo(f"Duration: {episode_time:.2f}s")
         rospy.loginfo(f"Steps: {self.steps_in_episode}")
         rospy.loginfo(f"Total reward: {self.current_episode_reward:.2f}")
         rospy.loginfo(f"Success rate: {success_rate:.2f}%")
         rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
-        #rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
+        rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
     '''TO FINISH'''
     def save_stats(self):
@@ -325,32 +311,40 @@ class RobotTrainer:
 
     def reset(self):
         """Reset method with statistics"""
-        #episode_time = rospy.get_time() - self.start_time
-        #self.total_training_time += episode_time
-        self.total_steps += self.steps_in_episode
-        self.episode_rewards.append(self.current_episode_reward)
-        self.avg_episode_length.append(self.steps_in_episode)
+        if self.start_time is not None: # Episode finished
+            
+            episode_time = rospy.get_time() - self.start_time
+            self.total_training_time += episode_time
+            self.total_steps += self.steps_in_episode
+            self.episode_rewards.append(self.current_episode_reward)
+            self.avg_episode_length.append(self.steps_in_episode)
+            
+            self.log_episode_stats(episode_time) # Log episode stats
+            self.save_stats() # Save stats
         
-        self.log_episode_stats() # Log episode stats
-        self.save_stats() # Save stats
-
-        # Reset episode variables
-        self.start_time = rospy.get_time()
-        self.current_episode_reward = 0
-        self.steps_in_episode = 0
-        self.episode_count += 1
-        self.old_state = None
-        self.old_action = None
-        
-        # Reset simulation
-        self.reset_simulation()
-        # Delay for simulation reset
-        time.sleep(0.2)
-        
-        # Spawn robot in random position
-        if not self.spawn_robot_random():
-            rospy.logerr("Failed to reset episode - spawn failed")
-            return
+        try:
+            '''
+            # Reset simulation
+            self.reset_simulation()
+            # Delay for simulation reset
+            rospy.sleep(0.2)
+            
+            # Spawn robot in random position
+            if not self.spawn_robot_random():
+                rospy.logerr("Failed to reset episode - spawn failed")
+                return
+            '''
+            
+            # Reset episode variables
+            self.start_time = rospy.get_time()
+            self.current_episode_reward = 0
+            self.steps_in_episode = 0
+            self.episode_count += 1
+            self.old_state = None
+            self.old_action = None
+            
+        except Exception as e:
+            rospy.logerr(f"Error during reset: {e}")
     
     def publish_velocity(self, action):
         """Publish velocity commands to the robot"""
@@ -367,7 +361,7 @@ class RobotTrainer:
         Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
         
         # Small margin to detect boundary approach
-        MARGIN = 0.
+        MARGIN = -0.1
         
         # Check if robot is near boundaries
         at_x_min = x <= X_MIN + MARGIN
@@ -381,8 +375,8 @@ class RobotTrainer:
             return max_linear_vel, False
             
         # Calculate the direction vector pointing inward
-        target_x = 0
-        target_y = 0
+        target_x = self.GOAL[0]
+        target_y = self.GOAL[1]
         
         # Calculate angle to center of map
         angle_to_center = np.arctan2(target_y - y, target_x - x)
@@ -392,8 +386,8 @@ class RobotTrainer:
         angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
                             np.cos(angle_to_center - theta))
         
-        # Check if robot is pointing inward (within 60 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/2
+        # Check if robot is pointing inward (within 45 degrees of center direction)
+        pointing_inward = abs(angle_diff) < np.pi/4
         
         # Calculate allowed linear velocity
         if pointing_inward:
@@ -406,143 +400,143 @@ class RobotTrainer:
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
-        try:
-            rospy.loginfo("Coming home.")
+        # try:
+        rospy.loginfo("Coming home.")
 
-            # Ensure home position is defined
-            if self.HOME is None:
-                rospy.logerr("Home position is not set.")
-                return
+        # Ensure home position is defined
+        if self.HOME is None:
+            rospy.logerr("Home position is not set.")
+            return
 
-            # Ensure goal position is defined
-            if self.GOAL is None:
-                rospy.logerr("Goal position is not set.")
-                return
+        # Ensure goal position is defined
+        if self.GOAL is None:
+            rospy.logerr("Goal position is not set.")
+            return
 
-            
-            next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
-            current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
-            home_position = np.array(self.HOME)
-            distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
-            current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
-            direction = home_position - current_position                            # Calculate Direction
-            desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
-            angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
-            angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
-            # If the robot is far from home and needs to correct its orientation
-            if distance_to_home > 0.05:
+        next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
+        current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
+        home_position = np.array(self.HOME)
+        distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
+        current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
+        direction = home_position - current_position                            # Calculate Direction
+        desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
+        angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
+        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
-                # Calculate the distance to the goal (r)
-                r = distance_to_home
-                # Calculate the angle to the goal relative to the robot's orientation (gamma)
-                gamma = angle_error
-                # Calculate the heading correction (delta)
-                delta = gamma + current_yaw
-                
-                # Control param
-                k1, k2, k3 = 0.6, 0.4, 0.1
+        # If the robot is far from home and needs to correct its orientation
+        if distance_to_home > 0.05:
 
-                # Compute the linear velocity (v)
-                linear_velocity = k1 * r * np.cos(gamma)
-                
-                # Compute the angular velocity (omega)
-                angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
+            # Calculate the distance to the goal (r)
+            r = distance_to_home
+            # Calculate the angle to the goal relative to the robot's orientation (gamma)
+            gamma = angle_error
+            # Calculate the heading correction (delta)
+            delta = gamma + current_yaw
 
-                '''
-                # First, rotate the robot to face the home position if not aligned
-                if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
-                    angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
-                    linear_velocity = 0.0  # Stop moving forward while correcting orientation
-                    rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
-                else:
-                    # Once aligned, move towards the home position
-                    direction = home_position - current_position
-                    direction /= distance_to_home  # Normalize direction vector
+            # Control param
+            k1, k2, k3 = 0.6, 0.4, 0.1
 
-                    # Calculate linear velocity (capped by maximum velocity)
-                    linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
+            # Compute the linear velocity (v)
+            linear_velocity = k1 * r * np.cos(gamma)
 
-                    # Set angular velocity to 0, since we're aligned with the target
-                    angular_velocity = 0.0
+            # Compute the angular velocity (omega)
+            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
 
-                    rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
-
-                # Publish velocity commands to move the robot
-                self.publish_velocity([linear_velocity, angular_velocity])
-                rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
-                
+            '''
+            # First, rotate the robot to face the home position if not aligned
+            if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
+                angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
+                linear_velocity = 0.0  # Stop moving forward while correcting orientation
+                rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
+                # Once aligned, move towards the home position
+                direction = home_position - current_position
+                direction /= distance_to_home  # Normalize direction vector
 
-                self.reorient_towards_goal()
+                # Calculate linear velocity (capped by maximum velocity)
+                linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
 
-            # Update the old state for the next iteration
-            self.old_state = next_state
+                # Set angular velocity to 0, since we're aligned with the target
+                angular_velocity = 0.0
 
-        except Exception as e:
-            # In case of an error, stop the robot
-            rospy.logerr(f"Error in come_back_home: {e}")
-            self.publish_velocity([0, 0])  # Stop the robot safely
+                rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
 
-    def reorient_towards_goal(self):
-        """Reorient the robot towards the goal position."""
-        try:
-            # Ensure goal position is defined
-            if self.GOAL is None:
-                rospy.logerr("Goal position is not set.")
-                return
-
-            # Get the current position and the goal position
-            current_position = np.array(self.old_state[:2])  # Assuming old_state contains [x, y]
-            goal_position = np.array(self.GOAL)
-            
-            # Calculate the desired angle to goal
-            desired_angle_to_goal = np.arctan2(goal_position[1] - current_position[1], goal_position[0] - current_position[0])
-
-            # Get the current yaw (orientation)
-            current_yaw = self.old_state[2]  # Assuming yaw is in the third element of old_state
-
-            # Calculate the angle difference (heading error) for reorientation
-            angle_error = desired_angle_to_goal - current_yaw
-            angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
-
-            # Rotate towards the goal if necessary
-            if abs(angle_error) > 0.1:  # A threshold for alignment
-                angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards goal
-                linear_velocity = 0.0  # Stop moving forward while rotating
-                rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
-            else:
-                angular_velocity = 0.0  # Already facing the goal
-                linear_velocity = 0.0  # No movement since we only care about orientation
-                # self.RESET = False
-
-            # Publish the reorientation velocity commands
+            # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
             rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
-        except Exception as e:
-            rospy.logerr(f"Error in reorient_towards_goal: {e}")
-            self.publish_velocity([0, 0])  # Stop the robot safely
-        
-        self.RESET = False
+        else:
+            # If we're close enough to the home position, stop the robot
+            #self.publish_velocity([0, 0])  # Stop moving
+            rospy.loginfo("Robot has returned home.")
+
+            # Now, reorient the robot towards the goal position
+            rospy.loginfo("Reorienting robot towards goal position.")
+            self.reorient_towards_goal(next_state)
+
+        # Update the old state for the next iteration
+        self.old_state = None
+
+    def reorient_towards_goal(self, state):
+        """Reorient the robot towards the goal position."""
+        # try:
+        # Ensure goal position is defined
+        if self.GOAL is None:
+            rospy.logerr("Goal position is not set.")
+            return
+
+        # Get the current position and the goal position
+        current_position = np.array(state[:2])  # Assuming old_state contains [x, y]
+        goal_position = np.array(self.GOAL)
+
+        # Calculate the desired angle to goal
+        desired_angle_to_goal = np.arctan2(goal_position[1] - current_position[1], goal_position[0] - current_position[0])
+
+        # Get the current yaw (orientation)
+        current_yaw = state[2]  # Assuming yaw is in the third element of old_state
+
+        # Calculate the angle difference (heading error) for reorientation
+        angle_error = desired_angle_to_goal - current_yaw
+        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+
+        # Rotate towards the goal if necessary
+        if abs(angle_error) > 0.1:  # A threshold for alignment
+            angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards goal
+            linear_velocity = 0.0  # Stop moving forward while rotating
+            rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
+        else:
+            angular_velocity = 0.0  # Already facing the goal
+            linear_velocity = 0.0  # No movement since we only care about orientation
+            rospy.loginfo("Robot is now facing the goal position.")
+            self.RESET = False
+            self.publish_velocity([linear_velocity, angular_velocity])
+            return
+
+        # Publish the reorientation velocity commands
+        self.publish_velocity([linear_velocity, angular_velocity])
+        rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
     def training_loop(self, msg):
         # S,A,R,S',done
-        #done = self.check_timeout()
-        done = False
-        if self.steps_in_episode > self.MAX_STEP_EPISODE: done = True
-
+        done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
 
         # Check boundaries and get allowed velocity
         allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
 
-        action = self.select_action(next_state)                     # Select action
+        action = self.select_action(next_state)                 # Select action
+
+        if np.isnan(action[1]) or np.isnan(action[0]):
+            action = [0, 0]
+        
         temp_action = action
 
         if is_outside: temp_action[0] = min(action[0], allowed_vel) # If outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
+
+        if next_state[0] > 2 and next_state[1] > 2: done = True # come home
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -550,8 +544,10 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            time.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
+            rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
         
+        '''if temp_action[0] == 0:
+            print(f"Action: [{temp_action[0]:.1f}, {temp_action[1]:.1f}]")'''
 
         # Add experience to replay buffer
         if self.old_state is not None:
@@ -567,7 +563,7 @@ class RobotTrainer:
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
         else:
             rospy.loginfo(f"Random Step. Episode steps: {self.steps_in_episode:.1f}")
-        
+
         # Update state and action
         self.old_state = next_state if not done else None
         self.old_action = action if not done else None
@@ -590,9 +586,9 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
         if self.RESET:
-            #self.come_back_home(msg)   # The robot is coming back home
-            self.reset_simulation()
-            self.RESET = False
+            self.come_back_home(msg)   # The robot is coming back home
+            # self.reset_simulation()
+            # self.RESET = False
         else:
             self.training_loop(msg)    # The robot is running in the environment
 
