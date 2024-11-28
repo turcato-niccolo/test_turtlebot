@@ -365,17 +365,38 @@ class RobotTrainer:
         MARGIN = 0.1
         
         # Check if robot is near boundaries
-        at_x_min = x <= X_MIN + MARGIN
-        at_x_max = x >= X_MAX - MARGIN
-        at_y_min = y <= Y_MIN + MARGIN
-        at_y_max = y >= Y_MAX - MARGIN
+        at_x_min = x <= X_MIN + MARGIN # Check if robot is at the bottom
+        at_x_max = x >= X_MAX - MARGIN # Check if robot is at the top
+        at_y_min = y <= Y_MIN + MARGIN # Check if robot is at the right
+        at_y_max = y >= Y_MAX - MARGIN # Check if robot is at the left
         
         is_at_boundary = at_x_min or at_x_max or at_y_min or at_y_max
         
         if not is_at_boundary:
             return max_linear_vel, False
+        
+        # Calculate if the robot is pointing inward
+        if at_y_min: # Left boundary
+            min = np.arctan2(X_MAX - x, Y_MIN - y)
+            max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
+            if theta > min and theta < max: return max_linear_vel, True
+
+        if at_y_max: # Right boundary
+            min = np.arctan2(X_MIN - x, Y_MAX - y)
+            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
+            if theta > min and theta < max: return max_linear_vel, True
+
+        if at_x_min:
+            min = np.arctan2(Y_MAX - y, X_MIN - x)
+            max = np.pi - np.arctan2(Y_MIN - y, X_MIN - x)
+            if theta > min and theta < max: return max_linear_vel, True
+
+        if at_x_max:
+            min = np.arctan2(Y_MIN - y, X_MAX - x)
+            max = np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
+            if theta > min and theta < max: return max_linear_vel, True
             
-        # Calculate the direction vector pointing inward
+        '''# Calculate the direction vector pointing inward
         target_x = 0
         target_y = 0
         
@@ -395,9 +416,9 @@ class RobotTrainer:
             allowed_linear_vel = max_linear_vel
         else:
             # Stop linear movement if pointing outward
-            allowed_linear_vel = 0.0
+            allowed_linear_vel = 0.0'''
         
-        return allowed_linear_vel, True
+        return 0.0, True
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
@@ -527,7 +548,7 @@ class RobotTrainer:
         
         temp_action = action
 
-        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If outside set lin vel to zero
+        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
