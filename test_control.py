@@ -28,7 +28,7 @@ class RobotTrainer:
         self.BATCH_SIZE = 32
         self.TRAINING_START_SIZE = 10**2
         self.SAMPLE_FREQ = 1 / 10
-        self.MAX_STEP_EPISODE = 100
+        self.MAX_STEP_EPISODE = 500
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = 5000
         
@@ -272,7 +272,7 @@ class RobotTrainer:
         success_rate = self.success_count / (self.episode_count + 1) * 100
         collision_rate = self.collision_count / (self.episode_count + 1) * 100
         
-        rospy.loginfo("\n=== Episode Statistics ===")
+        rospy.loginfo("\n\n=== Episode Statistics ===")
         rospy.loginfo(f"Episode {self.episode_count}:")
         rospy.loginfo(f"Duration: {episode_time:.2f}s")
         rospy.loginfo(f"Steps: {self.steps_in_episode}")
@@ -282,6 +282,7 @@ class RobotTrainer:
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
         rospy.loginfo("========================\n")
+
     '''TO FINISH'''
     def save_stats(self):
         """Save detailed statistics"""
@@ -361,7 +362,7 @@ class RobotTrainer:
         Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
         
         # Small margin to detect boundary approach
-        MARGIN = -0.1
+        MARGIN = 0.1
         
         # Check if robot is near boundaries
         at_x_min = x <= X_MIN + MARGIN
@@ -375,8 +376,8 @@ class RobotTrainer:
             return max_linear_vel, False
             
         # Calculate the direction vector pointing inward
-        target_x = self.GOAL[0]
-        target_y = self.GOAL[1]
+        target_x = 0
+        target_y = 0
         
         # Calculate angle to center of map
         angle_to_center = np.arctan2(target_y - y, target_x - x)
@@ -387,7 +388,7 @@ class RobotTrainer:
                             np.cos(angle_to_center - theta))
         
         # Check if robot is pointing inward (within 45 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/4
+        pointing_inward = abs(angle_diff) < np.pi/2
         
         # Calculate allowed linear velocity
         if pointing_inward:
@@ -427,27 +428,24 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
-            # Calculate the distance to the goal (r)
+            # Calculate the distance to home (r)
             r = distance_to_home
-            # Calculate the angle to the goal relative to the robot's orientation (gamma)
+            # Calculate the angle to the home relative to the robot's orientation (gamma)
             gamma = angle_error
             # Calculate the heading correction (delta)
             delta = gamma + current_yaw
-
             # Control param
             k1, k2, k3 = 0.6, 0.4, 0.1
-
-            # Compute the linear velocity (v)
+            # Compute the linear velocity
             linear_velocity = k1 * r * np.cos(gamma)
-
-            # Compute the angular velocity (omega)
+            # Compute the angular velocity
             angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
 
             '''
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
                 angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.0  # Stop moving forward while correcting orientation
+                linear_velocity = 0.1  # Stop moving forward while correcting orientation
                 rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -458,7 +456,7 @@ class RobotTrainer:
                 linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
 
                 # Set angular velocity to 0, since we're aligned with the target
-                angular_velocity = 0.0
+                #angular_velocity = 0.0
 
                 rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
 
@@ -467,9 +465,6 @@ class RobotTrainer:
             rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
-            # If we're close enough to the home position, stop the robot
-            #self.publish_velocity([0, 0])  # Stop moving
-            rospy.loginfo("Robot has returned home.")
 
             # Now, reorient the robot towards the goal position
             rospy.loginfo("Reorienting robot towards goal position.")
@@ -536,7 +531,7 @@ class RobotTrainer:
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
-        if next_state[0] > 2 and next_state[1] > 2: done = True # come home
+        #if next_state[0] > 2 and next_state[1] > 2: done = True # come home
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -545,9 +540,6 @@ class RobotTrainer:
         if not done:
             self.publish_velocity(temp_action)              # Execute action
             rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
-        
-        '''if temp_action[0] == 0:
-            print(f"Action: [{temp_action[0]:.1f}, {temp_action[1]:.1f}]")'''
 
         # Add experience to replay buffer
         if self.old_state is not None:
@@ -558,7 +550,7 @@ class RobotTrainer:
             if is_outside:
                 rospy.loginfo(f"Outside Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
             else:
-                rospy.loginfo(f"Training Step.    Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
+                rospy.loginfo(f"Inside Boundary.  Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
 
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
         else:
@@ -579,6 +571,7 @@ class RobotTrainer:
         if self.total_steps + self.steps_in_episode % self.EVAL_FREQ:
             # Implement the evaluation procedure
             self.save_stats()'''
+
     '''TO IMPLEMENT'''
     def evaluation(self):
         return 0
