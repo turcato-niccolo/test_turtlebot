@@ -86,8 +86,8 @@ class RobotTrainer:
 
     def _initialize_system(self):
         """Initialize both ROS and RL systems"""
-        self._initialize_ros()
         self._initialize_rl()
+        self._initialize_ros()
         rospy.loginfo("Robot Trainer initialized successfully")
 
     def _initialize_ros(self):
@@ -138,7 +138,7 @@ class RobotTrainer:
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.pose.pose.position.x - 1.0 # TODO: piece of shit change because I'm lazy af
+        x = msg.pose.pose.position.x # TODO: piece of shit change because I'm lazy af
         y = msg.pose.pose.position.y
         
         # Get orientation
@@ -272,7 +272,7 @@ class RobotTrainer:
         success_rate = self.success_count / (self.episode_count + 1) * 100
         collision_rate = self.collision_count / (self.episode_count + 1) * 100
         
-        rospy.loginfo("\n\n=== Episode Statistics ===")
+        print("\n\n========================= Episode Statistics =========================")
         rospy.loginfo(f"Episode {self.episode_count}:")
         rospy.loginfo(f"Duration: {episode_time:.2f}s")
         rospy.loginfo(f"Steps: {self.steps_in_episode}")
@@ -281,7 +281,7 @@ class RobotTrainer:
         rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
-        rospy.loginfo("========================\n")
+        print("==========================================================================\n")
 
     '''TO FINISH'''
     def save_stats(self):
@@ -446,7 +446,7 @@ class RobotTrainer:
             if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
                 angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards home
                 linear_velocity = 0.1  # Stop moving forward while correcting orientation
-                rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
+                #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
                 direction = home_position - current_position
@@ -456,9 +456,9 @@ class RobotTrainer:
                 linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
 
                 # Set angular velocity to 0, since we're aligned with the target
-                #angular_velocity = 0.0
+                angular_velocity = 0.0
 
-                rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
+                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
@@ -467,7 +467,7 @@ class RobotTrainer:
         else:
 
             # Now, reorient the robot towards the goal position
-            rospy.loginfo("Reorienting robot towards goal position.")
+            #rospy.loginfo("Reorienting robot towards goal position.")
             self.reorient_towards_goal(next_state)
 
         # Update the old state for the next iteration
@@ -499,11 +499,11 @@ class RobotTrainer:
         if abs(angle_error) > 0.1:  # A threshold for alignment
             angular_velocity = 0.5 * np.sign(angle_error)  # Rotate towards goal
             linear_velocity = 0.0  # Stop moving forward while rotating
-            rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
+            #rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
         else:
             angular_velocity = 0.0  # Already facing the goal
             linear_velocity = 0.0  # No movement since we only care about orientation
-            rospy.loginfo("Robot is now facing the goal position.")
+            #rospy.loginfo("Robot is now facing the goal position.")
             self.RESET = False
             self.publish_velocity([linear_velocity, angular_velocity])
             return
@@ -519,7 +519,7 @@ class RobotTrainer:
 
         # Check boundaries and get allowed velocity
         allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
-
+            
         action = self.select_action(next_state)                 # Select action
 
         if np.isnan(action[1]) or np.isnan(action[0]):
@@ -550,7 +550,7 @@ class RobotTrainer:
             if is_outside:
                 rospy.loginfo(f"Outside Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
             else:
-                rospy.loginfo(f"Inside Boundary.  Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
+                rospy.loginfo(f"Inside  Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
 
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
         else:
