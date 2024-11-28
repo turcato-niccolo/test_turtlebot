@@ -10,7 +10,8 @@ from std_srvs.srv import Empty
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 import tf.transformations
-import pickle
+from gym import spaces
+import argparse
 
 import ExpD3
 import OurDDPG
@@ -19,16 +20,16 @@ import SAC
 import utils
 
 class RobotTrainer:
-    def __init__(self):
+    def __init__(self, args, kwargs, action_space):
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
         self.MAX_VEL = [.5, np.pi/4]
         self.BUFFER_SIZE = 10**5
-        self.BATCH_SIZE = 32
-        self.TRAINING_START_SIZE = 10**2
+        self.BATCH_SIZE = args.batch_size
+        self.TRAINING_START_SIZE = 10**3
         self.SAMPLE_FREQ = 1 / 10
-        self.MAX_STEP_EPISODE = 500
+        self.MAX_STEP_EPISODE = 150
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = 5000
         
@@ -82,11 +83,11 @@ class RobotTrainer:
         }
         
         # Initialize ROS and RL components
-        self._initialize_system()
+        self._initialize_system(args, kwargs, action_space)
 
-    def _initialize_system(self):
+    def _initialize_system(self, args, kwargs, action_space):
         """Initialize both ROS and RL systems"""
-        self._initialize_rl()
+        self._initialize_rl(args, kwargs, action_space)
         self._initialize_ros()
         rospy.loginfo("Robot Trainer initialized successfully")
 
@@ -110,7 +111,7 @@ class RobotTrainer:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
 
-    def _initialize_rl(self):
+    def _initialize_rl(self, args, kwargs, action_space):
         """Initialize RL policy and replay buffer"""
         try:
             self.replay_buffer = utils.ReplayBuffer(
@@ -118,7 +119,17 @@ class RobotTrainer:
                 self.ACTION_DIM, 
                 max_size=self.BUFFER_SIZE
             )
-            self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
+
+            if 'DDPG' in args.policy:
+                self.policy = OurDDPG.DDPG(**kwargs)
+            elif 'TD3' in args.policy:
+                self.policy = TD3.TD3(**kwargs)
+            elif 'SAC' in args.policy:
+                self.policy = SAC.SAC(kwargs["state_dim"], action_space)
+            else:
+                raise NotImplementedError("Policy {} not implemented".format(args.policy))
+            
+            #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
             rospy.loginfo("RL components initialized")
         except Exception as e:
             rospy.logerr(f"RL initialization failed: {e}")
@@ -608,7 +619,82 @@ class RobotTrainer:
         else:
             self.training_loop(msg)    # The robot is running in the environment
 
-def main():
+
+def init():
+    print("""
+    \n\n\n
+    RUNNING MAIN
+    \n\n\n
+    """)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--policy", default="TD3")                              # Policy name (TD3, DDPG or OurDDPG)
+    parser.add_argument("--seed", default=0, type=int)                          # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
+    parser.add_argument("--batch_size", default=64, type=int)                   # Batch size for both actor and critic
+    parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
+    parser.add_argument("--start_timesteps", default=5e3, type=int)		        # Time steps initial random policy is used
+    parser.add_argument("--eval_freq", default=5e3, type=int)       	        # How often (time steps) we evaluate
+    parser.add_argument("--max_timesteps", default=5e5, type=int) 		        # Max time steps to run environment
+    parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
+    parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
+    parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
+    parser.add_argument("--policy_noise", default=0.2)                          # Noise added to target policy during critic update
+    parser.add_argument("--noise_clip", default=0.5)                            # Range to clip target policy noise
+    parser.add_argument("--policy_freq", default=2, type=int)                   # Frequency of delayed policy updates
+    parser.add_argument("--save_model", action="store_true")                    # Save model and optimizer parameters
+    parser.add_argument("--load_model", default="")                             # Model load file name, "" doesn't load, "default" uses file_name
+    parser.add_argument("--name", default=None)                                 # Name for logging
+    parser.add_argument("--n_q", default=2, type=int)                           # Number of Q functions
+    parser.add_argument("--bootstrap", default=None, type=float)                # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--min_q", default=0, type=int)                         # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--entropy_decay", default=0., type=float)              # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--entropy_factor", default=0., type=float)             # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--target_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--critic_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
+    parser.add_argument("--OVER", default=1, type=float)
+    parser.add_argument("--UNDER", default=1, type=float)
+    args = parser.parse_args()
+
+
+
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    state_dim = 6
+    action_dim = 2
+
+    # Define the action bounds
+    action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
+    action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
+    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    max_action = float(1)
+
+    kwargs = {
+        "state_dim": state_dim,
+        "action_dim": action_dim,
+        "max_action": max_action,
+        "batch_size": args.batch_size,
+        "hidden_size": args.hidden_size,
+        "start_timesteps": args.start_timesteps,
+        "eval_freq": args.eval_freq,
+        "max_timesteps": args.max_timesteps,
+        "--expl_noise": args.expl_noise,
+        "discount": args.discount,
+        "tau": args.tau,
+        "policy_noise": args.policy_noise * max_action,
+        "noise_clip": args.noise_clip * max_action,
+        "policy_freq": args.policy_freq,
+        "n_q": args.n_q,
+        "bootstrap": args.bootstrap,
+        "min_q": args.min_q > 0,
+        "entropy_decay": args.entropy_decay,
+        "entropy_factor": args.entropy_factor,
+        "target_estimations": args.target_estimations,
+        "critic_estimations": args.critic_estimations,
+        "OVER": args.OVER,
+        "UNDER": args.UNDER
+    }
+    
     # Create data folders
     if not os.path.exists("./results"):
         os.makedirs("./results")
@@ -616,10 +702,15 @@ def main():
     if not os.path.exists("./models"):
         os.makedirs("./models")
     
-    torch.manual_seed(100)
+    return args, kwargs, action_space
+
+
+def main():
+
+    args, kargs, action_space = init()
 
     # Initialize the robot trainer
-    trainer = RobotTrainer()
+    trainer = RobotTrainer(args, kargs, action_space)
     trainer.reset()
     trainer.publish_velocity([0.0,0.0]) # Stop the robot
     
