@@ -27,7 +27,7 @@ class RobotTrainer:
         self.MAX_VEL = [.5, np.pi/2]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = 32
-        self.TRAINING_START_SIZE = 15 * 10**3
+        self.TRAINING_START_SIZE = 1 * 10**3
         self.SAMPLE_FREQ = 1 / 10
         self.MAX_STEP_EPISODE = 500
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
@@ -393,7 +393,7 @@ class RobotTrainer:
                             np.cos(angle_to_center - theta))
         
         # Check if robot is pointing inward (within 60 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/3
+        pointing_inward = abs(angle_diff) < np.pi/2
         
         # Calculate allowed linear velocity
         if pointing_inward:
