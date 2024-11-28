@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Define the batch sizes and hidden sizes to test
-batch_sizes=(32 64 128)
-hidden_sizes=(32 64)
+batch_sizes=(64 128)
+hidden_sizes=(64)
 
 # Define the maximum number of parallel jobs
 max_jobs=10
@@ -15,7 +15,7 @@ function wait_for_jobs {
 }
 
 # Loop through the seeds
-for ((i=1; i<2; i+=1))
+for ((i=4; i<10; i+=1))
 do
     # Loop through the batch sizes
     for batch_size in "${batch_sizes[@]}"
