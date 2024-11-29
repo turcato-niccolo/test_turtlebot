@@ -136,9 +136,11 @@ if __name__ == "__main__":
 	parser.add_argument("--policy_freq", default=2, type=int)       	# Frequency of delayed policy updates
 	parser.add_argument("--save_model", default=True)        			# Save model and optimizer parameters
 	parser.add_argument("--load_model", default="")                 	# Model load file name, "" doesn't load, "default" uses file_name
+	parser.add_argument("--OVER", default=1, type=float)
+	parser.add_argument("--UNDER", default=1, type=float)  
 	args = parser.parse_args()
-
-	file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.env}_{args.seed}"
+      
+	file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.env}_{args.OVER}_{args.UNDER}_{args.seed}"
 
 	if not os.path.exists("./results"):
 		os.makedirs("./results")
@@ -171,6 +173,8 @@ if __name__ == "__main__":
 		"tau": args.tau,
 		"batch_size": args.batch_size,
         "hidden_size": args.hidden_size,
+        "OVER": args.OVER,
+        "UNDER": args.UNDER,
 	}
 
 	evaluate = False
