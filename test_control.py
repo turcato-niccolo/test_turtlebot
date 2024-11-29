@@ -11,6 +11,7 @@ from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 import tf.transformations
 from gym import spaces
+import pickle
 import argparse
 
 import ExpD3
@@ -25,7 +26,7 @@ class RobotTrainer:
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
         self.MAX_VEL = [.5, np.pi/4]
-        self.BUFFER_SIZE = 10**5
+        self.BUFFER_SIZE = 10**6
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 10
@@ -137,8 +138,10 @@ class RobotTrainer:
             if args.load_model != "":
                 policy_file = file_name if args.load_model == "default" else args.load_model
 
+                # Load the Parameters of the Neural Net
                 self.policy.load(f"./models/{policy_file}")
 
+                # Load the previous Statistics
                 loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
                 self.episodes = loaded_data['Total_Episodes']
                 self.rewards = loaded_data['Total_Reward']
@@ -149,6 +152,10 @@ class RobotTrainer:
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
+
+                # Load replay buffer
+                with open(f"replay_buffer_{self.file_name}.pkl", 'rb') as f:
+                    self.replay_buffer = pickle.load(f)
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
@@ -341,9 +348,9 @@ class RobotTrainer:
         # Save model
         self.policy.save(f"./models/{self.file_name}")
 
-        '''# Save buffer
-        with open('replay_buffer.pkl', 'wb') as f:
-            pickle.dump(self.replay_buffer, f)'''
+        # Save buffer
+        with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
+            pickle.dump(self.replay_buffer, f)
 
     def reset(self):
         """Reset method with statistics"""
@@ -639,8 +646,6 @@ class RobotTrainer:
         """Callback method"""
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
-            # self.reset_simulation()
-            # self.RESET = False
         else:
             self.training_loop(msg)    # The robot is running in the environment
 
