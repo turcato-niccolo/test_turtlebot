@@ -32,7 +32,7 @@ class RobotTrainer:
         self.MAX_STEP_EPISODE = 150
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = args.eval_freq
-        self.expl_noise = args.exp_noise
+        self.expl_noise = args.expl_noise
 
         self.file_name = file_name
         
@@ -372,7 +372,7 @@ class RobotTrainer:
             '''
             
             # Reset episode variables
-            self.start_time = rospy.get_time()
+            #self.start_time = rospy.get_time()
             self.current_episode_reward = 0
             self.steps_in_episode = 0
             self.episode_count += 1
@@ -563,6 +563,7 @@ class RobotTrainer:
             linear_velocity = 0.0  # No movement since we only care about orientation
             #rospy.loginfo("Robot is now facing the goal position.")
             self.RESET = False
+            self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
             return
 
@@ -678,7 +679,7 @@ def init():
     parser.add_argument("--UNDER", default=1, type=float)
     args = parser.parse_args()
 
-    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.env}_{args.seed}"
+    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -726,7 +727,7 @@ def init():
         os.makedirs("./models")
     
     print("--------------------------------------------------------------------------------------")
-    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {1/10} Hz, Env: {args.env}, Seed: {args.seed}")
+    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {1/10} Hz, Seed: {args.seed}")
     print("--------------------------------------------------------------------------------------")
     
     return args, kwargs, action_space, file_name
