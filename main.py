@@ -8,7 +8,7 @@ import os
 import tqdm
 
 import utils
-import OurDDPG, TD3, SAC
+import OurDDPG, TD3, SAC, ExpD3
 
 
 if __name__ == "__main__":
@@ -77,6 +77,8 @@ if __name__ == "__main__":
         policy = TD3.TD3(**kwargs)
     elif 'SAC' in args.policy:
         policy = SAC.SAC(kwargs["state_dim"], action_space)
+    elif 'ExpD3' in args.policy:
+        policy = ExpD3.DDPG(**kwargs)
     else:
         raise NotImplementedError("Policy {} not implemented".format(args.policy))
 

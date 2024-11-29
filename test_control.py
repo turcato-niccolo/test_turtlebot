@@ -26,11 +26,11 @@ class RobotTrainer:
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
         self.MAX_VEL = [.5, np.pi/4]
-        self.BUFFER_SIZE = 10**6
+        self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 10
-        self.MAX_STEP_EPISODE = 150
+        self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = args.eval_freq
         self.expl_noise = args.expl_noise
@@ -60,11 +60,13 @@ class RobotTrainer:
         self.success_count = 0
         self.collision_count = 0
         self.avg_episode_length = []
+        self.success = 0
+        self.collision = 0
 
         # Stats to save
         self.episodes = []
         self.rewards = []
-        self.success = []
+        self.success_list = []
         self.collisions = []
         self.training_time = []
         
@@ -93,7 +95,11 @@ class RobotTrainer:
         """Initialize both ROS and RL systems"""
         self._initialize_rl(args, kwargs, action_space, file_name)
         self._initialize_ros()
-        rospy.loginfo("Robot Trainer initialized successfully")
+        rospy.loginfo("Robot Trainer initialized successfully\n")
+
+        print("=============================================")
+        print("START")
+        print("=============================================")
 
     def _initialize_ros(self):
         """Initialize ROS nodes, publishers, and services"""
@@ -129,11 +135,12 @@ class RobotTrainer:
             elif 'TD3' in args.policy:
                 self.policy = TD3.TD3(**kwargs)
             elif 'SAC' in args.policy:
-                self.expl_noise = 0
                 self.policy = SAC.SAC(kwargs["state_dim"], action_space)
+            elif 'ExpD3' in args.policy:
+                self.policy = ExpD3.DDPG(**kwargs)
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
-            
+
             # Load model and data
             if args.load_model != "":
                 policy_file = file_name if args.load_model == "default" else args.load_model
@@ -171,7 +178,7 @@ class RobotTrainer:
         
         elapsed_time = rospy.get_time() - self.start_time    # Check elapsed time
         if elapsed_time > self.MAX_TIME:
-            rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
+            #rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
             return True
         return False
     
@@ -295,12 +302,16 @@ class RobotTrainer:
             reward -= self.OBSTACLE_PENALTY
             terminated = True
             self.collision_count += 1
+            self.success = 0
+            self.collision = 1
         
         # Check goal achievement
         if dist_to_goal <= self.GOAL_DIST:
             reward += self.GOAL_REWARD
             terminated = True
             self.success_count += 1
+            self.success = 1
+            self.collision = 0
         
         if np.isnan(reward):
             print(f"Reward Nan: {reward}, {state}, {next_state}")
@@ -309,30 +320,30 @@ class RobotTrainer:
 
     def log_episode_stats(self, episode_time):
         """Log detailed episode statistics"""
-        success_rate = self.success_count / (self.episode_count + 1) * 100
-        collision_rate = self.collision_count / (self.episode_count + 1) * 100
+        #success_rate = self.success_count / (self.episode_count + 1) * 100
+        #collision_rate = self.collision_count / (self.episode_count + 1) * 100
         
-        print("\n\n========================= Episode Statistics =========================")
-        rospy.loginfo(f"Episode {self.episode_count}:")
+        print("========================= Episode Statistics =============================")
+        rospy.loginfo(f"Episode: {self.episode_count}")
         rospy.loginfo(f"Duration: {episode_time:.2f}s")
         rospy.loginfo(f"Steps: {self.steps_in_episode}")
         rospy.loginfo(f"Total reward: {self.current_episode_reward:.2f}")
-        rospy.loginfo(f"Success rate: {success_rate:.2f}%")
-        rospy.loginfo(f"Collision rate: {collision_rate:.2f}%")
+        rospy.loginfo(f"Success: {self.success:.2f}")
+        rospy.loginfo(f"Collision: {self.collision:.2f}")
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
-        print("==========================================================================\n")
+        print("==========================================================================")
 
     '''TO FINISH'''
     def save_stats(self):
         """Save detailed statistics"""
-        success_rate = self.success_count / (self.episode_count + 1) * 100
-        collision_rate = self.collision_count / (self.episode_count + 1) * 100
+        #success_rate = self.success_count / (self.episode_count + 1) * 100
+        #collision_rate = self.collision_count / (self.episode_count + 1) * 100
 
         self.episodes.append(self.episode_count)
         self.rewards.append(self.current_episode_reward)
-        self.success.append(success_rate)
-        self.collisions.append(collision_rate)
+        self.success_list.append(self.success)
+        self.collisions.append(self.collision)
         self.training_time.append(self.total_training_time)
 
         # Save stats
@@ -340,7 +351,7 @@ class RobotTrainer:
             f"./results/stats_{self.file_name}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
-            Success_Rate=self.success, 
+            Success_Rate=self.success_list, 
             Collision_Rate=self.collisions,
             Training_Time=self.training_time,
             Total_Steps=self.total_steps
@@ -452,7 +463,7 @@ class RobotTrainer:
         angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
                             np.cos(angle_to_center - theta))
         
-        # Check if robot is pointing inward (within 45 degrees of center direction)
+        # Check if robot is pointing inward (within 90 degrees of center direction)
         pointing_inward = abs(angle_diff) < np.pi/2
         
         # Calculate allowed linear velocity
@@ -467,7 +478,7 @@ class RobotTrainer:
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
         # try:
-        rospy.loginfo("Coming home.")
+        #rospy.loginfo("Coming home.")
 
         # Ensure home position is defined
         if self.HOME is None:
@@ -572,6 +583,11 @@ class RobotTrainer:
             self.RESET = False
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
+
+            print("=============================================")
+            print("HOME REACHED - STARTING THE EPISODE")
+            print("=============================================")
+
             return
 
         # Publish the reorientation velocity commands
@@ -588,16 +604,14 @@ class RobotTrainer:
             
         action = self.select_action(next_state)                 # Select action
 
-        if np.isnan(action[1]) or np.isnan(action[0]):
-            action = [0, 0]
+        '''if np.isnan(action[1]) or np.isnan(action[0]):
+            action = [0, 0]'''
         
         temp_action = action
 
         if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
-
-        #if next_state[0] > 2 and next_state[1] > 2: done = True # come home
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -613,14 +627,12 @@ class RobotTrainer:
             
         # Train policy
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
-            if is_outside:
+            '''if is_outside:
                 rospy.loginfo(f"Outside Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
             else:
-                rospy.loginfo(f"Inside  Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
+                rospy.loginfo(f"Inside  Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")'''
 
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
-        else:
-            rospy.loginfo(f"Random Step. Episode steps: {self.steps_in_episode:.1f}")
 
         # Update state and action
         self.old_state = next_state if not done else None
@@ -629,7 +641,10 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
-            rospy.loginfo("Starting come-back-home behavior.")
+            print("=============================================")
+            print("EPISODE IS DONE - COMING HOME.")
+            print("=============================================")
+            self.publish_velocity([0.0, 0.0])
             self.reset()
         
         '''
@@ -653,7 +668,7 @@ class RobotTrainer:
 def init():
     print("""
     \n\n\n
-    RUNNING MAIN
+    RUNNING MAIN...
     \n\n\n
     """)
     parser = argparse.ArgumentParser()
@@ -662,7 +677,7 @@ def init():
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=64, type=int)                   # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
-    parser.add_argument("--start_timesteps", default=5e3, type=int)		        # Time steps initial random policy is used
+    parser.add_argument("--start_timesteps", default=100, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=5e3, type=int)       	        # How often (time steps) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
@@ -721,7 +736,8 @@ def init():
         "target_estimations": args.target_estimations,
         "critic_estimations": args.critic_estimations,
         "OVER": args.OVER,
-        "UNDER": args.UNDER
+        "UNDER": args.UNDER,
+        "rect_action_flag": True
     }
     
     # Create data folders
@@ -731,9 +747,9 @@ def init():
     if not os.path.exists("./models"):
         os.makedirs("./models")
     
-    print("--------------------------------------------------------------------------------------")
-    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {1/10} Hz, Seed: {args.seed}")
-    print("--------------------------------------------------------------------------------------")
+    print("=============================================================================================")
+    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
+    print("=============================================================================================\n")
     
     return args, kwargs, action_space, file_name
 
@@ -744,8 +760,9 @@ def main():
 
     # Initialize the robot trainer
     trainer = RobotTrainer(args, kargs, action_space, file_name)
-    trainer.reset()
-    trainer.publish_velocity([0.0,0.0]) # Stop the robot
+    trainer.reset()                         # Reset to start
+    trainer.start_time = rospy.get_time()   # Init the episode time
+    trainer.publish_velocity([0.0,0.0])     # Stop the robot
     
     # Start the training loop
     rospy.spin()

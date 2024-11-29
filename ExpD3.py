@@ -12,9 +12,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Actor(nn.Module):
+<<<<<<< HEAD
+	def __init__(self, state_dim, action_dim, max_action, hidden_size, rect_action_flag= False):
+		super(Actor, self).__init__()
+
+		self.rect_action_flag = rect_action_flag
+
+=======
 	def __init__(self, state_dim, action_dim, max_action, hidden_size):
 		super(Actor, self).__init__()
 
+>>>>>>> 36db2b4b0a0156a629075d3ff4fe44cb60cc07a8
 		self.l1 = nn.Linear(state_dim, hidden_size)
 		self.l2 = nn.Linear(hidden_size, hidden_size)
 		self.l3 = nn.Linear(hidden_size, action_dim)
@@ -25,7 +33,11 @@ class Actor(nn.Module):
 	def forward(self, state):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
-		return self.max_action * torch.tanh(self.l3(a))
+
+		if self.rect_action_flag:
+			return self.max_action * (torch.tanh(self.l3(a)) + 1) / 2
+		else:
+			return self.max_action * torch.tanh(self.l3(a))
 
 
 class Critic(nn.Module):
@@ -56,13 +68,21 @@ class DDPG(object):
 			noise_clip=0.5,
 			OVER=2.,
 			UNDER=1.,
+<<<<<<< HEAD
+			rect_action_flag= False,
+=======
+>>>>>>> 36db2b4b0a0156a629075d3ff4fe44cb60cc07a8
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip
 		self.policy_noise = policy_noise
 		self.total_it = 0
 		self.policy_freq = policy_freq
+<<<<<<< HEAD
+		self.actor = Actor(state_dim, action_dim, max_action, hidden_size, rect_action_flag).to(device)
+=======
 		self.actor = Actor(state_dim, action_dim, max_action, hidden_size).to(device)
+>>>>>>> 36db2b4b0a0156a629075d3ff4fe44cb60cc07a8
 		self.actor_target = copy.deepcopy(self.actor)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
