@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the batch sizes and hidden sizes to test
-batch_sizes=(64 128)
+batch_sizes=(32)
 hidden_sizes=(64)
 
 # Define the maximum number of parallel jobs
