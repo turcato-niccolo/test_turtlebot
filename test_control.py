@@ -37,6 +37,7 @@ class RobotTrainer:
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = args.eval_freq
+        self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
 
         self.file_name = file_name
@@ -66,6 +67,8 @@ class RobotTrainer:
         self.avg_episode_length = []
         self.success = 0
         self.collision = 0
+        self.evaluation_reward = 0
+        self.evaluation_reward_list = []
 
         # Stats to save
         self.episodes = []
@@ -154,12 +157,12 @@ class RobotTrainer:
 
                 # Load the previous Statistics
                 loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
-                self.episodes = loaded_data['Total_Episodes']
-                self.rewards = loaded_data['Total_Reward']
-                self.success = loaded_data['Success_Rate']
-                self.collisions = loaded_data['Collision_Rate']
-                self.training_time = loaded_data['Training_Time']
-                self.total_steps = loaded_data['Total_Steps']
+                self.episodes = loaded_data['Total_Episodes'].tolist()
+                self.rewards = loaded_data['Total_Reward'].tolist()
+                self.success_list = loaded_data['Success_Rate'].tolist()
+                self.collisions = loaded_data['Collision_Rate'].tolist()
+                self.training_time = loaded_data['Training_Time'].tolist()
+                self.total_steps = loaded_data['Total_Steps'].tolist()
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
@@ -258,8 +261,6 @@ class RobotTrainer:
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
-            if np.isnan(action[1]):
-                print(f"Select action: {action}")
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
@@ -506,7 +507,7 @@ class RobotTrainer:
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
         # If the robot is far from home and needs to correct its orientation
-        if distance_to_home > 0.05:
+        if distance_to_home > 0.1:
 
             '''# Calculate the distance to home (r)
             r = distance_to_home
@@ -523,9 +524,9 @@ class RobotTrainer:
 
             
             # First, rotate the robot to face the home position if not aligned
-            if abs(angle_error) > 0.1:  # A threshold to avoid small corrections
+            if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 1 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.2  # Stop moving forward while correcting orientation
+                linear_velocity = 0.05  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -588,9 +589,14 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            print("=============================================")
-            print("HOME REACHED - STARTING THE EPISODE")
-            print("=============================================")
+            if (self.episode_count % self.EVAL_FREQ) == 0:
+                print("=============================================")
+                print("HOME REACHED - STARTING THE EVALUATION")
+                print("=============================================")
+            else:
+                print("=============================================")
+                print("HOME REACHED - STARTING THE EPISODE")
+                print("=============================================")
 
             return
 
@@ -607,9 +613,6 @@ class RobotTrainer:
         allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
-
-        '''if np.isnan(action[1]) or np.isnan(action[0]):
-            action = [0, 0]'''
         
         temp_action = action
 
@@ -650,21 +653,56 @@ class RobotTrainer:
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             self.reset()
-        
-        '''
-        # Evaluate the policy
-        if self.total_steps + self.steps_in_episode % self.EVAL_FREQ:
-            # Implement the evaluation procedure
-            self.save_stats()'''
 
     '''TO IMPLEMENT'''
-    def evaluation(self):
-        return 0
+    def evaluation(self, msg):
+        done = self.check_timeout()
+        next_state = self.get_state_from_odom(msg)
+
+        # Check boundaries and get allowed velocity
+        allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
+            
+        action = self.policy.select_action(next_state)                 # Select action
+        
+        temp_action = action
+
+        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+
+        reward, terminated = self.compute_reward(self.old_state, next_state)
+
+        done = done or terminated                           # Episode termination
+        self.evaluation_reward += reward                    # Update episode reward
+
+        if not done:
+            self.publish_velocity(temp_action)              # Execute action
+            rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
+
+        # Reset episode if done
+        if done:
+            self.RESET = True
+            print("=============================================")
+            print("EVALUATION IS DONE - COMING HOME.")
+            print("=============================================")
+            self.publish_velocity([0.0, 0.0])
+
+            self.evaluation_reward_list.append(self.evaluation_reward)
+            self.evaluation_reward = 0
+
+            self.reset()
+
+            print(f"REWARD: {self.evaluation_reward}")
+
+            np.savez(
+            f"./results/eval_{self.file_name}.npz",
+            Evaluation_Reward_List=self.evaluation_reward_list)
     
     def callback(self, msg):
         """Callback method"""
+
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
+        elif (self.episode_count % self.EVAL_FREQ) == 0:
+            self.evaluation(msg)
         else:
             self.training_loop(msg)    # The robot is running in the environment
 
@@ -682,7 +720,7 @@ def init():
     parser.add_argument("--batch_size", default=64, type=int)                   # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=100, type=int)		        # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=5e3, type=int)       	        # How often (time steps) we evaluate
+    parser.add_argument("--eval_freq", default=50, type=int)       	        # How often (time steps) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
