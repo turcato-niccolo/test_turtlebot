@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the batch sizes and hidden sizes to test
-batch_sizes=(32)
+batch_sizes=(64 128)
 hidden_sizes=(64)
 
 # Define the maximum number of parallel jobs
@@ -15,7 +15,7 @@ function wait_for_jobs {
 }
 
 # Loop through the seeds
-for ((i=4; i<10; i+=1))
+for ((i=8; i<10; i+=1))
 do
     # Loop through the batch sizes
     for batch_size in "${batch_sizes[@]}"
@@ -23,20 +23,35 @@ do
         # Loop through the hidden sizes
         for hidden_size in "${hidden_sizes[@]}"
         do
-            # Run the different policies
-            for policy in "OurDDPG" "ExpD3" "TD3"
+            # Loop through the OVER parameter values (corrected with dot)
+            for over in $(seq 0.5 0.5 2) # Adjust step size if needed
             do
-                # Ensure no more than max_jobs are running
-                wait_for_jobs
+                # Convert any commas to dots
+                over=$(echo $over | awk '{gsub(",", "."); print $0}')
 
-                # Start the job
-                python3 main.py \
-                --policy $policy \
-                --batch_size $batch_size \
-                --hidden_size $hidden_size \
-                --env "MR-env" \
-                --seed $i &
+                # Loop through the UNDER parameter values (corrected with dot)
+                for under in $(seq 0.5 0.5 2) # Adjust step size if needed
+                do
+                    # Convert any commas to dots
+                    under=$(echo $under | awk '{gsub(",", "."); print $0}')
 
+                    # Run the different policies
+                    for policy in "ExpD3"
+                    do
+                        # Ensure no more than max_jobs are running
+                        wait_for_jobs
+
+                        # Start the job
+                        python3 main.py \
+                        --policy $policy \
+                        --batch_size $batch_size \
+                        --hidden_size $hidden_size \
+                        --env "MR-env" \
+                        --OVER $over \
+                        --UNDER $under \
+                        --seed $i &
+                    done
+                done
             done
         done
     done
@@ -44,6 +59,7 @@ done
 
 # Wait for all remaining jobs to finish
 wait
+
 
 : << 'COMMENT'
 for ((i=0;i<2;i+=1))
