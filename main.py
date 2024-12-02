@@ -84,7 +84,7 @@ if __name__ == "__main__":
     elif 'TD3' in args.policy:
         policy = TD3.TD3(**kwargs)
     elif 'SAC' in args.policy:
-        policy = SAC.SAC(kwargs["state_dim"], np.array(action_space))
+        policy = SAC.SAC(kwargs["state_dim"], action_space)
     elif 'ExpD3' in args.policy:
         policy = ExpD3.DDPG(**kwargs)
     else:
