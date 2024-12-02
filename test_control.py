@@ -163,6 +163,7 @@ class RobotTrainer:
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
+                self.evaluation_reward_list = np.load("./results/eval_ExpD3_256_256_0.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
@@ -337,6 +338,7 @@ class RobotTrainer:
         rospy.loginfo(f"Collision: {self.collision:.2f}")
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
         rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
+        rospy.loginfo(f"Total time: {rospy.get_time():.0f}")
         print("==========================================================================")
 
     '''TO FINISH'''
