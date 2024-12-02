@@ -96,10 +96,15 @@ if __name__ == "__main__":
 
     state, done = torch.zeros((state_dim,)), False
 
+    train_times = []
+
     loop_times = []
 
+    
     for t in tqdm.tqdm(range(int(args.max_timesteps))):
-        action = torch.zeros((action_dim,))
+        t2 = time.time()
+
+        action = policy.select_action(state)
         # Perform action
         next_state, reward, done = torch.randn((state_dim,)), 1, False
         done_bool = float(done)
@@ -113,10 +118,16 @@ if __name__ == "__main__":
         policy.train(replay_buffer, args.batch_size)
         t1 = time.time()
 
-        loop_times.append(t1-t0)
+        train_times.append(t1-t0)
+        loop_times.append(t1-t2)
 
+    train_times = np.array(train_times)
     loop_times = np.array(loop_times)
-    print('Times: {} +/-{}'.format(np.mean(loop_times), np.std(loop_times)))
-    print('Freq: {} +/-{}'.format(np.mean(1/loop_times), np.std(1/loop_times)))
+
+    print('Train Times: {} +/-{}'.format(np.mean(train_times), np.std(train_times)))
+    print('Train Freq: {} +/-{}'.format(np.mean(1/train_times), np.std(1/train_times)))
+
+    print('\nTrain Times: {} +/-{}'.format(np.mean(loop_times), np.std(loop_times)))
+    print('Train Freq: {} +/-{}'.format(np.mean(1/loop_times), np.std(1/loop_times)))
 
 
