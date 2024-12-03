@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import argparse
 import os
-from gym import spaces
+#from gym import spaces
 
 import tqdm
 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # Define the action bounds
     action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    #action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     kwargs = {
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     print('Train Times: {} +/-{}'.format(np.mean(train_times), np.std(train_times)))
     print('Train Freq: {} +/-{}'.format(np.mean(1/train_times), np.std(1/train_times)))
 
-    print('\nTrain Times: {} +/-{}'.format(np.mean(loop_times), np.std(loop_times)))
-    print('Train Freq: {} +/-{}'.format(np.mean(1/loop_times), np.std(1/loop_times)))
+    print('\nLoop Times: {} +/-{}'.format(np.mean(loop_times), np.std(loop_times)))
+    print('Loop Freq: {} +/-{}'.format(np.mean(1/loop_times), np.std(1/loop_times)))
 
 
