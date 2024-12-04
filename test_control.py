@@ -36,6 +36,7 @@ class RobotTrainer:
         self.SAMPLE_FREQ = 1 / 5.9
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
+        self.MAX_TIME = 15
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
@@ -70,6 +71,7 @@ class RobotTrainer:
         self.evaluation_reward = 0
         self.evaluation_reward_list = []
         self.evaluation_success_list = []
+        self.time_list = []
 
         # Stats to save
         self.episodes = []
@@ -338,11 +340,10 @@ class RobotTrainer:
         rospy.loginfo(f"Success: {self.success:.2f}")
         rospy.loginfo(f"Collision: {self.collision:.2f}")
         rospy.loginfo(f"Total training steps: {self.total_steps:.2f}")
-        rospy.loginfo(f"Total training time: {self.total_training_time:.2f}s")
-        rospy.loginfo(f"Total time: {rospy.get_time():.0f}")
+        rospy.loginfo(f"Total training time: {self.total_training_time//3600:.0f} h {(self.total_training_time%3600)//60:.0f} min")
+        rospy.loginfo(f"Total time: {rospy.get_time()//3600:.0f} h {(rospy.get_time()%3600)//60:.0f} min")
         print("==========================================================================")
 
-    '''TO FINISH'''
     def save_stats(self):
         """Save detailed statistics"""
         #success_rate = self.success_count / (self.episode_count + 1) * 100
@@ -683,6 +684,7 @@ class RobotTrainer:
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
+            self.time_list.append(rospy.get_time())
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
@@ -693,13 +695,13 @@ class RobotTrainer:
 
             print(f"REWARD: {self.evaluation_reward}")
             self.evaluation_reward = 0
-            self.episode_count -= 1
 
             np.savez(
             f"./results/eval_{self.file_name}.npz",
             Evaluation_Reward_List=self.evaluation_reward_list,
-            Evaluation_Success_List=self.evaluation_success_list)
-    
+            Evaluation_Success_List=self.evaluation_success_list,
+            Total_Time_List=self.time_list)
+
     def callback(self, msg):
         """Callback method"""
 
@@ -721,10 +723,10 @@ def init():
     parser.add_argument("--policy", default="TD3")                              # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--seed", default=0, type=int)                          # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
-    parser.add_argument("--batch_size", default=64, type=int)                   # Batch size for both actor and critic
+    parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=1000, type=int)		    # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=10, type=int)       	            # How often (episodes) we evaluate
+    parser.add_argument("--eval_freq", default=20, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
