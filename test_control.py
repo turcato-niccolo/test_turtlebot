@@ -33,7 +33,7 @@ class RobotTrainer:
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
-        self.SAMPLE_FREQ = 1 / 10
+        self.SAMPLE_FREQ = 1 / 5.9
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.EVAL_FREQ = args.eval_freq
@@ -69,6 +69,7 @@ class RobotTrainer:
         self.collision = 0
         self.evaluation_reward = 0
         self.evaluation_reward_list = []
+        self.evaluation_success_list = []
 
         # Stats to save
         self.episodes = []
@@ -163,7 +164,7 @@ class RobotTrainer:
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                self.evaluation_reward_list = np.load("./results/eval_ExpD3_256_256_0.npz")['Evaluation_Reward_List'].tolist()
+                self.evaluation_reward_list = np.load("./results/eval_TD3_256_256_0.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
@@ -252,7 +253,7 @@ class RobotTrainer:
                     return True
             except rospy.ServiceException as e:
                 rospy.logwarn(f"Spawn attempt {attempt + 1} failed: {e}")
-                rospy.sleep(0.5)
+                #rospy.sleep(0.5)
         
         rospy.logerr("Failed to spawn robot after maximum attempts")
         return False
@@ -636,11 +637,6 @@ class RobotTrainer:
             
         # Train policy
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
-            '''if is_outside:
-                rospy.loginfo(f"Outside Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")
-            else:
-                rospy.loginfo(f"Inside  Boundary. Action: [{action[0]:.2f}, {action[1]:.2f}], Episode steps: {self.steps_in_episode:.1f}")'''
-
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
 
         # Update state and action
@@ -656,7 +652,6 @@ class RobotTrainer:
             self.publish_velocity([0.0, 0.0])
             self.reset()
 
-    '''TO IMPLEMENT'''
     def evaluation(self, msg):
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
@@ -664,11 +659,11 @@ class RobotTrainer:
         # Check boundaries and get allowed velocity
         allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
-        action = self.policy.select_action(next_state)                 # Select action
+        action = self.policy.select_action(next_state)                  # Select action
         
         temp_action = action
 
-        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+        if is_outside: temp_action[0] = min(action[0], allowed_vel)     # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -677,8 +672,8 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
-
+            rospy.sleep(0.1)
+        
         # Reset episode if done
         if done:
             self.RESET = True
@@ -688,15 +683,22 @@ class RobotTrainer:
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
-            self.evaluation_reward = 0
+
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                self.evaluation_success_list.append(1)
+            else:
+                self.evaluation_success_list.append(0)
 
             self.reset()
 
             print(f"REWARD: {self.evaluation_reward}")
+            self.evaluation_reward = 0
+            self.episode_count -= 1
 
             np.savez(
             f"./results/eval_{self.file_name}.npz",
-            Evaluation_Reward_List=self.evaluation_reward_list)
+            Evaluation_Reward_List=self.evaluation_reward_list,
+            Evaluation_Success_List=self.evaluation_success_list)
     
     def callback(self, msg):
         """Callback method"""
@@ -721,8 +723,8 @@ def init():
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=64, type=int)                   # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
-    parser.add_argument("--start_timesteps", default=100, type=int)		        # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=50, type=int)       	        # How often (time steps) we evaluate
+    parser.add_argument("--start_timesteps", default=1000, type=int)		    # Time steps initial random policy is used
+    parser.add_argument("--eval_freq", default=10, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
