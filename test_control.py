@@ -724,6 +724,11 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
 
+        if (rospy.get_time() // 3600) > 20:
+            print("EXITING...")
+            rospy.sleep(2)
+            sys.exit()
+
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         elif (self.episode_count % self.EVAL_FREQ) == 0:
@@ -820,30 +825,27 @@ def init():
     
     return args, kwargs, action_space, file_name
 
+def reset_simulation():
+    rospy.wait_for_service('/gazebo/reset_simulation')
+    try:
+        reset_simulation_service = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
+        reset_simulation_service()
+    except rospy.ServiceException as e:
+        rospy.logerr(f"Failed to reset simulation: {e}")
 
 def main():
 
+    # Set the parameters
     args, kargs, action_space, file_name = init()
-
+    # Reset gazebo simulation
+    reset_simulation()
     # Initialize the robot trainer
     trainer = RobotTrainer(args, kargs, action_space, file_name)
     trainer.reset()                                                 # Reset to start
     trainer.start_time = rospy.get_time()                           # Init the episode time
     trainer.publish_velocity([0.0,0.0])                             # Stop the robot
-    
+
     rospy.spin()
-
-    '''start_time = rospy.get_time()                                   # Record the start time in seconds
-    time_limit = 3600 * 2                                           # 2 hour in seconds
-
-    # Start the training loop
-    while not rospy.is_shutdown():
-        elapsed_time = rospy.get_time() - start_time
-        if elapsed_time >= time_limit:
-            rospy.loginfo("1 hour reached. Stopping the script.")
-            sys.exit(0)                                             # Exit the script after time limit
-        
-        rospy.spin_once()'''
 
 if __name__ == "__main__":
     main()
