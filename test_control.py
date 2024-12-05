@@ -33,7 +33,7 @@ class RobotTrainer:
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
-        self.SAMPLE_FREQ = 1 / 5.9
+        self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.MAX_TIME = 15
@@ -322,9 +322,6 @@ class RobotTrainer:
             self.success = 1
             self.collision = 0
         
-        if np.isnan(reward):
-            print(f"Reward Nan: {reward}, {state}, {next_state}")
-        
         return reward, terminated
 
     def log_episode_stats(self, episode_time):
@@ -382,7 +379,7 @@ class RobotTrainer:
             self.episode_rewards.append(self.current_episode_reward)
             self.avg_episode_length.append(self.steps_in_episode)
             
-            self.log_episode_stats(episode_time) # Log episode stats
+            #self.log_episode_stats(episode_time) # Log episode stats
             self.save_stats() # Save stats
         
         try:
@@ -743,8 +740,8 @@ def init():
     parser.add_argument("--entropy_factor", default=0., type=float)             # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--target_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--critic_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
-    parser.add_argument("--OVER", default=1, type=float)
-    parser.add_argument("--UNDER", default=1, type=float)
+    parser.add_argument("--OVER", default=2, type=float)
+    parser.add_argument("--UNDER", default=0.5, type=float)
     args = parser.parse_args()
 
     file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
