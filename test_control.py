@@ -33,7 +33,7 @@ class RobotTrainer:
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
-        self.SAMPLE_FREQ = 1 / 8
+        self.SAMPLE_FREQ = 1 / 5.9
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.MAX_TIME = 15
@@ -61,6 +61,8 @@ class RobotTrainer:
         
         # Training statistics
         self.episode_count = 0
+        self.count_eval = 0
+        self.evaluation_count = 0
         self.total_training_time = 0
         self.episode_rewards = []
         self.success_count = 0
@@ -73,6 +75,7 @@ class RobotTrainer:
         self.evaluation_success_list = []
         self.time_list = []
         self.average_success_list = []
+        self.average_reward_list = []
 
         # Stats to save
         self.episodes = []
@@ -591,14 +594,14 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            if (self.episode_count % self.EVAL_FREQ) == 0:
+            '''if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
                 print("HOME REACHED - STARTING THE EVALUATION")
                 print("=============================================")
             else:
                 print("=============================================")
                 print("HOME REACHED - STARTING THE EPISODE")
-                print("=============================================")
+                print("=============================================")'''
 
             return
 
@@ -645,9 +648,9 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
-            print("=============================================")
+            '''print("=============================================")
             print("EPISODE IS DONE - COMING HOME.")
-            print("=============================================")
+            print("=============================================")'''
             self.publish_velocity([0.0, 0.0])
             self.reset()
 
@@ -676,38 +679,47 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
-            print("=============================================")
+            '''print("=============================================")
             print("EVALUATION IS DONE - COMING HOME.")
-            print("=============================================")
+            print("=============================================")'''
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
-            self.time_list.append(rospy.get_time())
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
             else:
                 self.evaluation_success_list.append(0)
             
-            self.evaluation_reward = 0
             self.reset()
 
-            print(f"REWARD: {self.evaluation_reward}")
+            self.evaluation_reward = 0
 
             if self.evaluation_count < 10:
                 self.evaluation_count += 1
                 self.episode_count -= 1
             else:
+                self.count_eval += 1
+                self.time_list.append(rospy.get_time())
                 self.evaluation_count = 0
-                avrg = sum(self.evaluation_success_list[-10:]) / 10
+                avrg_reward = sum(self.evaluation_reward_list[-10:]) / 10
+                avrg_success = sum(self.evaluation_success_list[-10:]) / 10
 
-                self.average_success_list.append(avrg)
+                self.average_success_list.append(avrg_success)
+                self.average_reward_list.append(avrg_reward)
 
                 np.savez(
                 f"./results/eval_{self.file_name}.npz",
-                Evaluation_Reward_List=self.evaluation_reward_list,
+                Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
+
+                print("\n=============================================")
+                print(f"EVALUATION STATISTICS # {self.count_eval}")
+                print(f"Reward:          {self.average_reward_list[-1]:.1f}")
+                print(f"Average Success: {self.average_success_list[-1]:.2f}")
+                print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
+                print("=============================================")
 
     def callback(self, msg):
         """Callback method"""
@@ -733,7 +745,7 @@ def init():
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=1000, type=int)		    # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=20, type=int)       	            # How often (episodes) we evaluate
+    parser.add_argument("--eval_freq", default=50, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
