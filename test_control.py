@@ -72,6 +72,7 @@ class RobotTrainer:
         self.evaluation_reward_list = []
         self.evaluation_success_list = []
         self.time_list = []
+        self.average_success_list = []
 
         # Stats to save
         self.episodes = []
@@ -687,17 +688,26 @@ class RobotTrainer:
                 self.evaluation_success_list.append(1)
             else:
                 self.evaluation_success_list.append(0)
-
+            
+            self.evaluation_reward = 0
             self.reset()
 
             print(f"REWARD: {self.evaluation_reward}")
-            self.evaluation_reward = 0
 
-            np.savez(
-            f"./results/eval_{self.file_name}.npz",
-            Evaluation_Reward_List=self.evaluation_reward_list,
-            Evaluation_Success_List=self.evaluation_success_list,
-            Total_Time_List=self.time_list)
+            if self.evaluation_count < 10:
+                self.evaluation_count += 1
+                self.episode_count -= 1
+            else:
+                self.evaluation_count = 0
+                avrg = sum(self.evaluation_success_list[-10:]) / 10
+
+                self.average_success_list.append(avrg)
+
+                np.savez(
+                f"./results/eval_{self.file_name}.npz",
+                Evaluation_Reward_List=self.evaluation_reward_list,
+                Evaluation_Success_List=self.average_success_list,
+                Total_Time_List=self.time_list)
 
     def callback(self, msg):
         """Callback method"""
