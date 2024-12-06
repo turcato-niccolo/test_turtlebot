@@ -33,7 +33,7 @@ class RobotTrainer:
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
-        self.SAMPLE_FREQ = 1 / 5.9
+        self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.MAX_TIME = 15
@@ -723,11 +723,12 @@ class RobotTrainer:
 
     def callback(self, msg):
         """Callback method"""
-
-        if (rospy.get_time() // 3600) > 20:
-            print("EXITING...")
+        
+        if (rospy.get_time() // 3600) >= 1.0:
+            print(f"Time: {rospy.get_time() // 3600} h {rospy.get_time() % 3600 // 60} min")
+            self.publish_velocity([0.0,0.0])
             rospy.sleep(2)
-            sys.exit()
+            sys.exit("EXITING. GOODBYE!")
 
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
@@ -809,7 +810,7 @@ def init():
         "critic_estimations": args.critic_estimations,
         "OVER": args.OVER,
         "UNDER": args.UNDER,
-        "rect_action_flag": True
+        "rect_action_flag": False
     }
     
     # Create data folders
