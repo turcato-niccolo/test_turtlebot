@@ -85,6 +85,7 @@ class RobotTrainer:
         self.training_time = []
         
         # State variables
+        self.initial_time = None
         self.start_time = None
         self.old_state = None
         self.old_action = None
@@ -723,13 +724,15 @@ class RobotTrainer:
 
     def callback(self, msg):
         """Callback method"""
-        
-        if (rospy.get_time() // 3600) >= 1.0:
-            print(f"Time: {rospy.get_time() // 3600} h {rospy.get_time() % 3600 // 60} min")
-            self.publish_velocity([0.0,0.0])
-            rospy.sleep(2)
-            sys.exit("EXITING. GOODBYE!")
+        elapsed_time = rospy.get_time() - self.initial_time
 
+        if  (elapsed_time // 3600) >= 20:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            rospy.sleep(2)
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+        
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         elif (self.episode_count % self.EVAL_FREQ) == 0:
@@ -843,6 +846,7 @@ def main():
     # Initialize the robot trainer
     trainer = RobotTrainer(args, kargs, action_space, file_name)
     trainer.reset()                                                 # Reset to start
+    trainer.initial_time = rospy.get_time()
     trainer.start_time = rospy.get_time()                           # Init the episode time
     trainer.publish_velocity([0.0,0.0])                             # Stop the robot
 
