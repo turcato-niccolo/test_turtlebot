@@ -36,7 +36,7 @@ class RobotTrainer:
         self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
-        self.MAX_TIME = 15
+        self.MAX_TIME = 20
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
@@ -311,6 +311,13 @@ class RobotTrainer:
             else:
                 reward += self.MOVEMENT_PENALTY
         
+        bound_x = self.WALL_DIST + 0.2
+        bound_y = bound_x
+
+        # Check boundary
+        if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
+            terminated = True
+
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
             reward -= self.OBSTACLE_PENALTY
@@ -616,13 +623,13 @@ class RobotTrainer:
         next_state = self.get_state_from_odom(msg)
 
         # Check boundaries and get allowed velocity
-        allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
+        #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
         
         temp_action = action
 
-        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+        #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -660,13 +667,13 @@ class RobotTrainer:
         next_state = self.get_state_from_odom(msg)
 
         # Check boundaries and get allowed velocity
-        allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
+        # allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.policy.select_action(next_state)                  # Select action
         
         temp_action = action
 
-        if is_outside: temp_action[0] = min(action[0], allowed_vel)     # If is outside set lin vel to zero
+        # if is_outside: temp_action[0] = min(action[0], allowed_vel)     # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -726,7 +733,7 @@ class RobotTrainer:
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
-        if  (elapsed_time // 3600) >= 20:
+        if  (elapsed_time // 3600) >= 40:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
@@ -753,7 +760,7 @@ def init():
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
-    parser.add_argument("--start_timesteps", default=1000, type=int)		    # Time steps initial random policy is used
+    parser.add_argument("--start_timesteps", default=1e3, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=50, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
