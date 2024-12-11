@@ -85,7 +85,7 @@ class RobotTrainer:
         self.training_time = []
         
         # State variables
-        self.initial_time = None
+        self.initial_time = 0
         self.start_time = None
         self.old_state = None
         self.old_action = None
@@ -260,7 +260,7 @@ class RobotTrainer:
                     return True
             except rospy.ServiceException as e:
                 rospy.logwarn(f"Spawn attempt {attempt + 1} failed: {e}")
-                #rospy.sleep(0.5)
+                #rospy.sleep(0.5)  # NOT USED
         
         rospy.logerr("Failed to spawn robot after maximum attempts")
         return False
@@ -392,7 +392,7 @@ class RobotTrainer:
             # Reset simulation
             self.reset_simulation()
             # Delay for simulation reset
-            rospy.sleep(0.2)
+            rospy.sleep(0.2) # NOT USED
             
             # Spawn robot in random position
             if not self.spawn_robot_random():
@@ -549,7 +549,7 @@ class RobotTrainer:
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
-            rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
+            ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
 
@@ -608,7 +608,7 @@ class RobotTrainer:
 
         # Publish the reorientation velocity commands
         self.publish_velocity([linear_velocity, angular_velocity])
-        rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
+        ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
     def training_loop(self, msg):
         # S,A,R,S',done
@@ -632,7 +632,7 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
+            ##rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
         if self.old_state is not None:
@@ -675,7 +675,7 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            rospy.sleep(0.1)
+            ##rospy.sleep(0.1)
         
         # Reset episode if done
         if done:
@@ -729,7 +729,7 @@ class RobotTrainer:
         if  (elapsed_time // 3600) >= 20:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
-            rospy.sleep(2)
+            ##rospy.sleep(2)
             rospy.signal_shutdown("EXITING. GOODBYE!")
             return
         
