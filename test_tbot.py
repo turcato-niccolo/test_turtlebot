@@ -47,8 +47,6 @@ def callback(msg):
     #vel = Twist()
     #vel.linear.x = 0.5
     #vel.angular.z = 0.2
-    vel = Vector3(0.1, 0.1, 0.1)
-
     '''v = 0.5
     w = 0.2
     r = 0.128
@@ -58,7 +56,7 @@ def callback(msg):
     w_l = (v - w * d/2) / r'''
 
     # (destra, sinistra, null)
-    vel = Vector3(0.5, 0.5, 0) # (r l null)
+    vel = Vector3(0., 0., 0) # (r l null)
 
     print(vel)
     
