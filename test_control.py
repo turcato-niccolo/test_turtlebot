@@ -1,6 +1,4 @@
 import rospy
-
-import rospy
 import torch
 
 from nav_msgs.msg import Odometry
