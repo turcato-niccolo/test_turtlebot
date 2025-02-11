@@ -41,6 +41,13 @@ class RobotTrainer:
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
 
+        # PID errors
+        self.prev_linear_error = 0.0
+        self.prev_angular_error = 0.0
+        self.linear_integral = 0.0
+        self.angular_integral = 0.0
+        self.last_time = rospy.get_time()
+
         self.file_name = file_name
         
         # Environment parameters
@@ -227,44 +234,6 @@ class RobotTrainer:
         
         return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
 
-    def random_init_pos(self):
-        """Compute the initial position ramdomly"""
-        x = np.random.uniform(self.SPAWN_LIMITS['x'][0], self.SPAWN_LIMITS['x'][1])
-        y = np.random.uniform(self.SPAWN_LIMITS['y'][0], self.SPAWN_LIMITS['y'][1])
-        yaw = np.random.uniform(self.SPAWN_LIMITS['yaw'][0], self.SPAWN_LIMITS['yaw'][1])
-
-        return x,y,yaw
-        
-    def spawn_robot_random(self):
-        """Spawn the robot in a random valid position with error handling"""
-        max_attempts = 5
-        for attempt in range(max_attempts):
-            try:
-                x, y, yaw = self.random_init_pos()
-
-                quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
-                
-                model_state = ModelState()
-                model_state.model_name = 'turtlebot3_burger'
-                model_state.pose.position.x = x
-                model_state.pose.position.y = y
-                model_state.pose.position.z = 0.0
-                model_state.pose.orientation.x = quaternion[0]
-                model_state.pose.orientation.y = quaternion[1]
-                model_state.pose.orientation.z = quaternion[2]
-                model_state.pose.orientation.w = quaternion[3]
-                
-                response = self.set_model_state(model_state)
-                if response.success:
-                    rospy.loginfo(f"Robot spawned at x:{x:.2f}, y:{y:.2f}, yaw:{yaw:.2f}")
-                    return True
-            except rospy.ServiceException as e:
-                rospy.logwarn(f"Spawn attempt {attempt + 1} failed: {e}")
-                #rospy.sleep(0.5)  # NOT USED
-        
-        rospy.logerr("Failed to spawn robot after maximum attempts")
-        return False
-    
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
@@ -493,6 +462,46 @@ class RobotTrainer:
         
         return allowed_linear_vel, True
     
+    def pid_control(self, linear_error, angular_error):
+
+        # PID Gains
+        KP_LINEAR = 0.5  # Proportional gain for linear velocity
+        KI_LINEAR = 0.01
+        KD_LINEAR = 0.1
+
+        KP_ANGULAR = 1.2  # Proportional gain for angular velocity
+        KI_ANGULAR = 0.02
+        KD_ANGULAR = 0.3
+
+        """ PID controller for velocity adjustment """
+        current_time = rospy.get_time()
+        dt = current_time - self.last_time  # Time difference
+        self.last_time = current_time
+
+        # Compute integral terms
+        self.linear_integral += linear_error * dt
+        self.angular_integral += angular_error * dt
+
+        # Compute derivative terms
+        linear_derivative = (linear_error - self.prev_linear_error) / dt if dt > 0 else 0.0
+        angular_derivative = (angular_error - self.prev_angular_error) / dt if dt > 0 else 0.0
+
+        # PID output for linear velocity
+        linear_output = (KP_LINEAR * linear_error) + (KI_LINEAR * self.linear_integral) + (KD_LINEAR * linear_derivative)
+
+        # PID output for angular velocity
+        angular_output = (KP_ANGULAR * angular_error) + (KI_ANGULAR * self.angular_integral) + (KD_ANGULAR * angular_derivative)
+
+        # Limit speeds
+        linear_output = max(min(linear_output, 0.3), -0.3)  # Max linear speed
+        angular_output = max(min(angular_output, 1.0), -1.0)  # Max angular speed
+
+        # Update previous errors
+        self.prev_linear_error = linear_error
+        self.prev_angular_error = angular_error
+
+        return linear_output, angular_output
+    
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
         # try:
@@ -520,20 +529,20 @@ class RobotTrainer:
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
         # If the robot is far from home and needs to correct its orientation
-        if distance_to_home > 0.1:
+        '''if distance_to_home > 0.1:
 
-            '''# Calculate the distance to home (r)
-            r = distance_to_home
+            # Calculate the distance to home (r)
+            #r = distance_to_home
             # Calculate the angle to the home relative to the robot's orientation (gamma)
-            gamma = angle_error
+            #gamma = angle_error
             # Calculate the heading correction (delta)
-            delta = gamma + current_yaw
+            #delta = gamma + current_yaw
             # Control param
-            k1, k2, k3 = 0.6, 0.4, 0.1
+            #k1, k2, k3 = 0.6, 0.4, 0.1
             # Compute the linear velocity
-            linear_velocity = k1 * r * np.cos(gamma)
+            #linear_velocity = k1 * r * np.cos(gamma)
             # Compute the angular velocity
-            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
+            #angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
 
             
             # First, rotate the robot to face the home position if not aligned
@@ -563,7 +572,16 @@ class RobotTrainer:
             # Now, reorient the robot towards the goal position
             #rospy.loginfo("Reorienting robot towards goal position.")
             self.reorient_towards_goal(next_state)
+        '''
+        if distance_to_home > 0.1:
+            linear_velocity, angular_velocity = self.pid_control(distance_to_home, angle_error)
+        else:
+            linear_velocity = 0.0
+            angular_velocity = 0.0
+            rospy.loginfo("Arrived at Home!")
+            self.reorient_towards_goal()
 
+        self.publish_velocity(linear_velocity, angular_velocity)
         # Update the old state for the next iteration
         self.old_state = None
 
