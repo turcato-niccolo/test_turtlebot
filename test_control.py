@@ -29,7 +29,7 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [.5, np.pi/4]
+        self.MAX_VEL = [2, np.pi]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
@@ -40,13 +40,6 @@ class RobotTrainer:
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
-
-        # PID errors
-        self.prev_linear_error = 0.0
-        self.prev_angular_error = 0.0
-        self.linear_integral = 0.0
-        self.angular_integral = 0.0
-        self.last_time = rospy.get_time()
 
         self.file_name = file_name
         
@@ -102,13 +95,6 @@ class RobotTrainer:
 
         # Flags
         self.RESET = False
-        
-        # Spawn area limits
-        self.SPAWN_LIMITS = {
-            'x': (-0.95, -0.75),  
-            'y': (-0.15, 0.15),
-            'yaw': (-np.pi/4, np.pi/4)
-        }
         
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
@@ -208,7 +194,7 @@ class RobotTrainer:
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.pose.pose.position.x # TODO: piece of shit change because I'm lazy af
+        x = msg.pose.pose.position.x -1 # TODO: piece of shit change because I'm lazy af
         y = msg.pose.pose.position.y
         
         # Get orientation
@@ -462,46 +448,6 @@ class RobotTrainer:
         
         return allowed_linear_vel, True
     
-    def pid_control(self, linear_error, angular_error):
-
-        # PID Gains
-        KP_LINEAR = 0.5  # Proportional gain for linear velocity
-        KI_LINEAR = 0.01
-        KD_LINEAR = 0.1
-
-        KP_ANGULAR = 1.2  # Proportional gain for angular velocity
-        KI_ANGULAR = 0.02
-        KD_ANGULAR = 0.3
-
-        """ PID controller for velocity adjustment """
-        current_time = rospy.get_time()
-        dt = current_time - self.last_time  # Time difference
-        self.last_time = current_time
-
-        # Compute integral terms
-        self.linear_integral += linear_error * dt
-        self.angular_integral += angular_error * dt
-
-        # Compute derivative terms
-        linear_derivative = (linear_error - self.prev_linear_error) / dt if dt > 0 else 0.0
-        angular_derivative = (angular_error - self.prev_angular_error) / dt if dt > 0 else 0.0
-
-        # PID output for linear velocity
-        linear_output = (KP_LINEAR * linear_error) + (KI_LINEAR * self.linear_integral) + (KD_LINEAR * linear_derivative)
-
-        # PID output for angular velocity
-        angular_output = (KP_ANGULAR * angular_error) + (KI_ANGULAR * self.angular_integral) + (KD_ANGULAR * angular_derivative)
-
-        # Limit speeds
-        linear_output = max(min(linear_output, 0.3), -0.3)  # Max linear speed
-        angular_output = max(min(angular_output, 1.0), -1.0)  # Max angular speed
-
-        # Update previous errors
-        self.prev_linear_error = linear_error
-        self.prev_angular_error = angular_error
-
-        return linear_output, angular_output
-    
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
         # try:
@@ -529,22 +475,22 @@ class RobotTrainer:
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
         # If the robot is far from home and needs to correct its orientation
-        '''if distance_to_home > 0.1:
+        if distance_to_home > 0.1:
 
             # Calculate the distance to home (r)
-            #r = distance_to_home
+            r = distance_to_home
             # Calculate the angle to the home relative to the robot's orientation (gamma)
-            #gamma = angle_error
+            gamma = angle_error
             # Calculate the heading correction (delta)
-            #delta = gamma + current_yaw
+            delta = gamma + current_yaw
             # Control param
-            #k1, k2, k3 = 0.6, 0.4, 0.1
+            k1, k2, k3 = 1.7, 0.9, 0.3
             # Compute the linear velocity
-            #linear_velocity = k1 * r * np.cos(gamma)
+            linear_velocity = np.clip(k1 * r * np.cos(gamma), -self.MAX_VEL[0], self.MAX_VEL[0]) / self.MAX_VEL[0]
             # Compute the angular velocity
-            #angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta
+            angular_velocity = np.clip(k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta, -self.MAX_VEL[1], self.MAX_VEL[1]) / self.MAX_VEL[1]
 
-            
+            '''
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 1 * np.sign(angle_error)  # Rotate towards home
@@ -561,7 +507,7 @@ class RobotTrainer:
                 # Set angular velocity to 0, since we're aligned with the target
                 angular_velocity = 0.0
 
-                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
+                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
@@ -581,7 +527,7 @@ class RobotTrainer:
             rospy.loginfo("Arrived at Home!")
             self.reorient_towards_goal()
 
-        self.publish_velocity(linear_velocity, angular_velocity)
+        self.publish_velocity([linear_velocity, angular_velocity])'''
         # Update the old state for the next iteration
         self.old_state = None
 
@@ -609,7 +555,7 @@ class RobotTrainer:
 
         # Rotate towards the goal if necessary
         if abs(angle_error) > 0.1:  # A threshold for alignment
-            angular_velocity = 1 * np.sign(angle_error)  # Rotate towards goal
+            angular_velocity = 2 * np.sign(angle_error)  # Rotate towards goal
             linear_velocity = 0.0  # Stop moving forward while rotating
             #rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
         else:
@@ -620,14 +566,14 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            '''if (self.episode_count % self.EVAL_FREQ) == 0:
+            if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
                 print("HOME REACHED - STARTING THE EVALUATION")
                 print("=============================================")
             else:
                 print("=============================================")
                 print("HOME REACHED - STARTING THE EPISODE")
-                print("=============================================")'''
+                print("=============================================")
 
             return
 
@@ -674,9 +620,9 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
-            '''print("=============================================")
+            print("=============================================")
             print("EPISODE IS DONE - COMING HOME.")
-            print("=============================================")'''
+            print("=============================================")
             self.publish_velocity([0.0, 0.0])
             self.reset()
 
@@ -688,6 +634,10 @@ class RobotTrainer:
         # allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.policy.select_action(next_state)                  # Select action
+        # Clip the linear velocity to be between 0 and 1
+        action[0] = np.clip(action[0], 0, 1)
+        # Clip the angular velocity to be between -1 and 1
+        action[1] = np.clip(action[1], -1, 1)
         
         temp_action = action
 
