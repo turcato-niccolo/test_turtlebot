@@ -8,6 +8,7 @@ import os
 import sys
 
 from geometry_msgs.msg import Twist, Pose, Vector3
+from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
 from vicon.msg import Subject
 
@@ -53,7 +54,7 @@ class RobotTrainer:
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
         self.GOAL_REWARD = 1000
-        self.OBSTACLE_PENALTY = 100
+        self.OBSTACLE_PENALTY = 10
         self.MOVEMENT_PENALTY = 1
         self.GAUSSIAN_REWARD_SCALE = 2
         
@@ -74,6 +75,7 @@ class RobotTrainer:
         self.time_list = []
         self.average_success_list = []
         self.average_reward_list = []
+        self.trajectory = []
 
         # Stats to save
         self.episodes = []
@@ -122,7 +124,7 @@ class RobotTrainer:
             self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)                 # Initialize velocity publisher
             
             # Initialize odometry subscriber
-            rospy.Subscriber('/vicon/turtlebot_14', Subject, self.callback, queue_size=1)                    # Initialize odometry subscriber
+            rospy.Subscriber('/turtlebot_14/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
             rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
 
         except rospy.ROSException as e:
@@ -164,7 +166,7 @@ class RobotTrainer:
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                self.evaluation_reward_list = np.load("./results/eval_TD3_256_256_0.npz")['Evaluation_Reward_List'].tolist()
+                self.evaluation_reward_list = np.load("./results/eval_TD3_64_128_0.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
@@ -194,26 +196,22 @@ class RobotTrainer:
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.position.x
-        y = msg.position.y
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
         
         # Get orientation
         quaternion = (
-            msg.orientation.x,
-            msg.orientation.y,
-            msg.orientation.z,
-            msg.orientation.w
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
         )
         euler = tf.transformations.euler_from_quaternion(quaternion)
         yaw = euler[2]
         
         # Robot velocities
-
-        #linear_vel = msg.twist.twist.linear.x
-        #angular_vel = msg.twist.twist.angular.z
-
-        linear_vel = 0
-        angular_vel = 0
+        linear_vel = msg.twist.twist.linear.x
+        angular_vel = msg.twist.twist.angular.z
         
         # Distance and angle to goal
         goal_distance = np.sqrt((self.GOAL[0] - x)**2 + (self.GOAL[1] - y)**2)
@@ -239,7 +237,7 @@ class RobotTrainer:
             # Random action sampling
             action = np.random.normal(0, 1, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0], 0, 1)
+            action[0] = np.clip(action[0] + 0.5, 0, 1) 
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
 
@@ -489,7 +487,7 @@ class RobotTrainer:
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
 
         # If the robot is far from home and needs to correct its orientation
-        if distance_to_home > 0.1:
+        if distance_to_home > 0.05:
 
             '''# Calculate the distance to home (r)
             r = distance_to_home
@@ -508,7 +506,7 @@ class RobotTrainer:
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 2  # Stop moving forward while correcting orientation
+                linear_velocity = 0.5  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -635,6 +633,12 @@ class RobotTrainer:
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
 
+        self.trajectory.append(next_state[:3])
+
+        np.savez(
+                f"./results/trajectory_{self.file_name}_{self.evaluation_count}.npz",
+                Trajectory=self.trajectory)
+
         # Check boundaries and get allowed velocity
         # allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
@@ -665,12 +669,21 @@ class RobotTrainer:
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
+                print("=============================================")
+                print("YOU ARE AN IRONMAN")
+                print("=============================================")
             else:
                 self.evaluation_success_list.append(0)
             
             self.reset()
 
             self.evaluation_reward = 0
+
+            self.trajectory = []
+
+            self.HOME = np.array([-0.9, 0]) + np.random.uniform(-0.1, 0.1, size=(2,))
+
+            print(f"Home Position: {self.HOME}")
 
             if self.evaluation_count < 10:
                 self.evaluation_count += 1
@@ -698,7 +711,7 @@ class RobotTrainer:
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
 
-    def callback(self, msg):
+    '''def callback(self, msg):
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
@@ -714,7 +727,14 @@ class RobotTrainer:
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
-            self.training_loop(msg)    # The robot is running in the environment
+            self.training_loop(msg)    # The robot is running in the environment'''
+
+    def callback(self, msg):
+
+        if self.RESET:
+            self.come_back_home(msg)   # The robot is coming back home
+        else:
+            self.evaluation(msg)       # Evaluation
 
 
 def init():
@@ -738,7 +758,7 @@ def init():
     parser.add_argument("--noise_clip", default=0.5)                            # Range to clip target policy noise
     parser.add_argument("--policy_freq", default=2, type=int)                   # Frequency of delayed policy updates
     parser.add_argument("--save_model", action="store_true")                    # Save model and optimizer parameters
-    parser.add_argument("--load_model", default="")                             # Model load file name, "" doesn't load, "default" uses file_name
+    parser.add_argument("--load_model", default="default")                             # Model load file name, "" doesn't load, "default" uses file_name
     parser.add_argument("--name", default=None)                                 # Name for logging
     parser.add_argument("--n_q", default=2, type=int)                           # Number of Q functions
     parser.add_argument("--bootstrap", default=None, type=float)                # Percentage to keep for bootstrap for Q functions
@@ -816,6 +836,8 @@ def main():
     trainer.initial_time = rospy.get_time()
     trainer.start_time = rospy.get_time()                           # Init the episode time
     trainer.publish_velocity([0.0,0.0])                             # Stop the robot
+
+    trainer.RESET = True                                            # Start with a come back
 
     rospy.spin()
 
