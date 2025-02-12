@@ -9,10 +9,9 @@ import sys
 from geometry_msgs.msg import Twist, Pose, Vector3
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
-from vicon.msg import Subject
 
-from gym import spaces
-import pickle
+# from gym import spaces
+import pickle as pkl
 import argparse
 
 import ExpD3
@@ -156,6 +155,9 @@ class RobotTrainer:
                 # Load the Parameters of the Neural Net
                 self.policy.load(f"./models/{policy_file}")
 
+                self.save_model()   # save the model as a pkl file
+                #self.load_model()   # load the model as a pkl file
+
                 # Load the previous Statistics
                 loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
                 self.episodes = loaded_data['Total_Episodes'].tolist()
@@ -171,7 +173,7 @@ class RobotTrainer:
 
                 # Load replay buffer
                 with open(f"replay_buffer_{self.file_name}.pkl", 'rb') as f:
-                    self.replay_buffer = pickle.load(f)
+                    self.replay_buffer = pkl.load(f)
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
@@ -180,6 +182,40 @@ class RobotTrainer:
             rospy.logerr(f"RL initialization failed: {e}")
             raise
     
+    def load_model(self):
+        actor_params = pkl.load(open('actor_params.pkl', 'rb')) 
+        critic_params = pkl.load(open('critic_params.pkl', 'rb')) 
+
+        self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+        self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+        self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+        self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+        self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+        self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+
+        self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+        self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+        self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+        self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+        self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+        self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+        self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
+        self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
+        self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
+        self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
+        self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
+        self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[12], requires_grad=True))
+
+    def save_model(self):
+        actor_params = self.policy.actor.parameters()
+        critic_params = self.policy.critic.parameters()
+        
+        p_actor = [l.cpu().detach().numpy() for l in actor_params]
+        p_critic = [l.cpu().detach().numpy() for l in critic_params]   
+        
+        pkl.dump(p_actor, open('actor_params.pkl', 'wb'))
+        pkl.dump(p_critic, open('critic_params.pkl', 'wb'))
+
     def check_timeout(self):
         """Check if the current episode has exceeded the maximum time limit"""
         if self.start_time is None:
@@ -198,7 +234,6 @@ class RobotTrainer:
 
         return np.arctan2(siny_cosp, cosy_cosp)
 
-
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
@@ -212,8 +247,7 @@ class RobotTrainer:
             msg.pose.pose.orientation.z,
             msg.pose.pose.orientation.w
         )
-        euler = self.yaw_from_quaternion(quaternion)
-        yaw = euler[2]
+        yaw = self.yaw_from_quaternion(quaternion)
         
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
@@ -788,7 +822,7 @@ def init():
     # Define the action bounds
     action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = None # spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     kwargs = {
