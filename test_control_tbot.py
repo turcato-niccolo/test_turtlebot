@@ -3,7 +3,6 @@
 import rospy
 import torch
 import numpy as np
-import tf
 import os
 import sys
 
@@ -12,7 +11,6 @@ from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
 from vicon.msg import Subject
 
-import tf.transformations
 from gym import spaces
 import pickle
 import argparse
@@ -193,6 +191,14 @@ class RobotTrainer:
             return True
         return False
     
+    def yaw_from_quaternion(self, q):
+        x, y, z, w = q
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+
+        return np.arctan2(siny_cosp, cosy_cosp)
+
+
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
@@ -206,7 +212,7 @@ class RobotTrainer:
             msg.pose.pose.orientation.z,
             msg.pose.pose.orientation.w
         )
-        euler = tf.transformations.euler_from_quaternion(quaternion)
+        euler = self.yaw_from_quaternion(quaternion)
         yaw = euler[2]
         
         # Robot velocities
