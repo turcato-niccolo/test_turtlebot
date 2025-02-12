@@ -152,11 +152,13 @@ class RobotTrainer:
             if args.load_model != "":
                 policy_file = file_name if args.load_model == "default" else args.load_model
 
-                # Load the Parameters of the Neural Net
-                self.policy.load(f"./models/{policy_file}")
+                self.load_model()   # load the model as a pkl file
 
-                self.save_model()   # save the model as a pkl file
-                #self.load_model()   # load the model as a pkl file
+                # Load the Parameters of the Neural Net
+                #self.policy.load(f"./models/{policy_file}")
+
+                #self.save_model()   # save the model as a pkl file
+                
 
                 # Load the previous Statistics
                 loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
@@ -199,12 +201,12 @@ class RobotTrainer:
         self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
         self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
         self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
-        self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
-        self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
-        self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
-        self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
-        self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
-        self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[12], requires_grad=True))
+        self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
+        self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
+        self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
+        self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
+        self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
+        self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
 
     def save_model(self):
         actor_params = self.policy.actor.parameters()
@@ -379,7 +381,7 @@ class RobotTrainer:
 
         # Save buffer
         with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
-            pickle.dump(self.replay_buffer, f)
+            pkl.dump(self.replay_buffer, f)
 
     def reset(self):
         """Reset method with statistics"""
@@ -667,6 +669,7 @@ class RobotTrainer:
             print("EPISODE IS DONE - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
+            self.HOME = np.array([-0.9, 0]) + np.random.uniform(-0.1, 0.1, size=(2,))
             self.reset()
 
     def evaluation(self, msg):
@@ -751,7 +754,7 @@ class RobotTrainer:
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
 
-    '''def callback(self, msg):
+    def callback(self, msg):
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
@@ -767,14 +770,14 @@ class RobotTrainer:
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
-            self.training_loop(msg)    # The robot is running in the environment'''
+            self.training_loop(msg)    # The robot is running in the environment
 
-    def callback(self, msg):
+    '''def callback(self, msg):
 
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         else:
-            self.evaluation(msg)       # Evaluation
+            self.evaluation(msg)       # Evaluation'''
 
 
 def init():
