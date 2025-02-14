@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import tf
 import os
+import time
 import sys
 
 from nav_msgs.msg import Odometry
@@ -29,7 +30,7 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [2, np.pi]
+        self.MAX_VEL = [0.5, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
@@ -60,7 +61,7 @@ class RobotTrainer:
         self.GAUSSIAN_REWARD_SCALE = 2
         
         # Training statistics
-        self.episode_count = 0
+        self.episode_count = 1
         self.count_eval = 0
         self.evaluation_count = 0
         self.total_training_time = 0
@@ -349,18 +350,10 @@ class RobotTrainer:
             #self.log_episode_stats(episode_time) # Log episode stats
             self.save_stats() # Save stats
         
-        try:
-            '''
+            
             # Reset simulation
             self.reset_simulation()
-            # Delay for simulation reset
-            rospy.sleep(0.2) # NOT USED
-            
-            # Spawn robot in random position
-            if not self.spawn_robot_random():
-                rospy.logerr("Failed to reset episode - spawn failed")
-                return
-            '''
+            time.sleep(0.2)
             
             # Reset episode variables
             #self.start_time = rospy.get_time()
@@ -369,10 +362,7 @@ class RobotTrainer:
             self.episode_count += 1
             self.old_state = None
             self.old_action = None
-            
-        except Exception as e:
-            rospy.logerr(f"Error during reset: {e}")
-    
+
     def publish_velocity(self, action):
         """Publish velocity commands to the robot"""
         vel_msg = Twist()
@@ -621,7 +611,7 @@ class RobotTrainer:
         if done:
             self.RESET = True
             print("=============================================")
-            print("EPISODE IS DONE - COMING HOME.")
+            print(f"EPISODE {self.episode_count} IS DONE.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             self.reset()
@@ -697,7 +687,7 @@ class RobotTrainer:
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
 
-    def callback(self, msg):
+    '''def callback(self, msg):
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
@@ -711,6 +701,23 @@ class RobotTrainer:
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         elif (self.episode_count % self.EVAL_FREQ) == 0:
+            self.evaluation(msg)
+        else:
+            self.training_loop(msg)    # The robot is running in the environment'''
+    
+
+    def callback(self, msg):
+        """Callback method"""
+        elapsed_time = rospy.get_time() - self.initial_time
+
+        if  (elapsed_time // 3600) >= 40:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            ##rospy.sleep(2)
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+        
+        if (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
             self.training_loop(msg)    # The robot is running in the environment
