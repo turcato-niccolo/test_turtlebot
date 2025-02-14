@@ -273,6 +273,7 @@ class RobotTrainer:
         # Check boundary
         if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
             terminated = True
+            reward -= 10
 
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
@@ -356,7 +357,7 @@ class RobotTrainer:
             time.sleep(0.2)
             
             # Reset episode variables
-            #self.start_time = rospy.get_time()
+            self.start_time = rospy.get_time()
             self.current_episode_reward = 0
             self.steps_in_episode = 0
             self.episode_count += 1
@@ -645,9 +646,9 @@ class RobotTrainer:
         # Reset episode if done
         if done:
             self.RESET = True
-            '''print("=============================================")
-            print("EVALUATION IS DONE - COMING HOME.")
-            print("=============================================")'''
+            print("=============================================")
+            print(f"EVALUATION {self.evaluation_count} IS DONE.")
+            print("=============================================")
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
@@ -661,12 +662,12 @@ class RobotTrainer:
 
             self.evaluation_reward = 0
 
-            if self.evaluation_count < 10:
+            if self.evaluation_count < 9:
                 self.evaluation_count += 1
                 self.episode_count -= 1
             else:
                 self.count_eval += 1
-                self.time_list.append(rospy.get_time())
+                self.time_list.append(self.total_training_time)
                 self.evaluation_count = 0
                 avrg_reward = sum(self.evaluation_reward_list[-10:]) / 10
                 avrg_success = sum(self.evaluation_success_list[-10:]) / 10
