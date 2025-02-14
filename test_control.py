@@ -51,7 +51,7 @@ class RobotTrainer:
         self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-0.9, 0.0])
+        self.HOME = np.array([-1, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -195,8 +195,8 @@ class RobotTrainer:
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.pose.pose.position.x -1 # TODO: piece of shit change because I'm lazy af
-        y = msg.pose.pose.position.y
+        x = msg.pose.pose.position.x + self.HOME[0] # TODO: piece of shit change because I'm lazy af
+        y = msg.pose.pose.position.y + self.HOME[1]
         
         # Get orientation
         quaternion = (
@@ -354,6 +354,10 @@ class RobotTrainer:
             
             # Reset simulation
             self.reset_simulation()
+            # Change initial position
+            r = np.sqrt(np.random.uniform(0,1))*0.1
+            theta = np.random.uniform(0,2*np.pi)
+            self.HOME = np.array([-1 + 0.1 * np.cos(theta), 0 + 0.1 * np.sin(theta)])
             time.sleep(0.2)
             
             # Reset episode variables
