@@ -714,7 +714,7 @@ class RobotTrainer:
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
-        if  (elapsed_time // 3600) >= 40:
+        if  (elapsed_time // 3600) > 4:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
