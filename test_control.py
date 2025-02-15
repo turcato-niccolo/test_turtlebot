@@ -273,11 +273,10 @@ class RobotTrainer:
         # Check boundary
         if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
             terminated = True
-            reward -= 10
 
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
-            reward -= self.OBSTACLE_PENALTY
+            reward -= 10
             terminated = True
             self.collision_count += 1
             self.success = 0
