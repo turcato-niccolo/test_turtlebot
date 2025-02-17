@@ -25,14 +25,14 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [2, np.pi]
+        self.MAX_VEL = [0.25, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
-        self.MAX_TIME = 20
+        self.MAX_TIME = 10
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
@@ -91,7 +91,8 @@ class RobotTrainer:
         self.total_steps = 0
 
         # Flags
-        self.RESET = False
+        self.RESET = True
+        self.eval_flag = True
         
         # Spawn area limits
         self.SPAWN_LIMITS = {
@@ -155,38 +156,38 @@ class RobotTrainer:
                 self.load_model()   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
-                #self.policy.load(f"./models/{policy_file}")
-
+                #self.policy.load(f"./models/{policy_file}"
                 #self.save_model()   # save the model as a pkl file
-                
 
                 # Load the previous Statistics
-                loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
+                '''loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
                 self.episodes = loaded_data['Total_Episodes'].tolist()
                 self.rewards = loaded_data['Total_Reward'].tolist()
                 self.success_list = loaded_data['Success_Rate'].tolist()
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                self.evaluation_reward_list = np.load("./results/eval_TD3_64_128_0.npz")['Evaluation_Reward_List'].tolist()
+                #self.evaluation_reward_list = np.load("./results/eval_ExpD3_64_128_1.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
-                self.total_training_time = self.training_time[-1]
+                self.total_training_time = self.training_time[-1]'''
 
                 # Load replay buffer
-                with open(f"replay_buffer_{self.file_name}.pkl", 'rb') as f:
-                    self.replay_buffer = pkl.load(f)
+                '''with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'rb') as f:
+                    self.replay_buffer = pkl.load(f)'''
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
             rospy.loginfo("RL components initialized")
         except Exception as e:
             rospy.logerr(f"RL initialization failed: {e}")
-            raise
     
     def load_model(self):
-        actor_params = pkl.load(open('actor_params.pkl', 'rb')) 
-        critic_params = pkl.load(open('critic_params.pkl', 'rb')) 
+        actor_params = pkl.load(open(f'actor_params_{self.file_name}.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'critic_params_{self.file_name}.pkl', 'rb'))
+
+        '''actor_params = pkl.load(open(f'actor_params.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'critic_params.pkl', 'rb'))'''
 
         self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
         self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
@@ -208,6 +209,8 @@ class RobotTrainer:
         self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
         self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
 
+        print("LOADED MODEL")
+
     def save_model(self):
         actor_params = self.policy.actor.parameters()
         critic_params = self.policy.critic.parameters()
@@ -215,8 +218,13 @@ class RobotTrainer:
         p_actor = [l.cpu().detach().numpy() for l in actor_params]
         p_critic = [l.cpu().detach().numpy() for l in critic_params]   
         
-        pkl.dump(p_actor, open('actor_params.pkl', 'wb'))
-        pkl.dump(p_critic, open('critic_params.pkl', 'wb'))
+        pkl.dump(p_actor, open(f'actor_params_{self.file_name}.pkl', 'wb'))
+        pkl.dump(p_critic, open(f'critic_params_{self.file_name}.pkl', 'wb'))
+
+        '''pkl.dump(p_actor, open(f'actor_params_backup.pkl', 'wb'))
+        pkl.dump(p_critic, open(f'critic_params_backup.pkl', 'wb'))'''
+
+        print("SAVED MODEL")
 
     def check_timeout(self):
         """Check if the current episode has exceeded the maximum time limit"""
@@ -315,8 +323,8 @@ class RobotTrainer:
 
         # Check boundary
         if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
-            # terminated = True
-            print("WALL")
+            terminated = True
+            #print("WALL")
 
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
@@ -325,7 +333,7 @@ class RobotTrainer:
             self.collision_count += 1
             self.success = 0
             self.collision = 1
-            print("OBSTACLE")
+            #print("OBSTACLE")
             
         
         # Check goal achievement
@@ -426,7 +434,7 @@ class RobotTrainer:
         w = action[1] * self.MAX_VEL[1]
 
         d = 0.173
-        r = 0.325
+        r = 0.0325
 
         w_r = (v + w * d/2) / r
         w_l = (v - w * d/2) / r
@@ -517,7 +525,6 @@ class RobotTrainer:
             rospy.logerr("Goal position is not set.")
             return
 
-
         next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
         current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
         home_position = np.array(self.HOME)
@@ -531,20 +538,6 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
-            '''# Calculate the distance to home (r)
-            r = distance_to_home
-            # Calculate the angle to the home relative to the robot's orientation (gamma)
-            gamma = angle_error
-            # Calculate the heading correction (delta)
-            delta = gamma + current_yaw
-            # Control param
-            k1, k2, k3 = 0.6, 0.4, 0.1
-            # Compute the linear velocity
-            linear_velocity = k1 * r * np.cos(gamma)
-            # Compute the angular velocity
-            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
-
-            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
@@ -564,7 +557,7 @@ class RobotTrainer:
                 #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
-            self.publish_velocity([linear_velocity, angular_velocity])
+            self.publish_velocity([linear_velocity / self.MAX_VEL[0], angular_velocity / self.MAX_VEL[1]])
             ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
@@ -613,17 +606,17 @@ class RobotTrainer:
 
             if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
-                print("HOME REACHED - STARTING THE EVALUATION")
+                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")
             else:
                 print("=============================================")
-                print("HOME REACHED - STARTING THE EPISODE")
+                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count}")
                 print("=============================================")
 
             return
 
         # Publish the reorientation velocity commands
-        self.publish_velocity([linear_velocity, angular_velocity])
+        self.publish_velocity([linear_velocity / self.MAX_VEL[0], angular_velocity / self.MAX_VEL[1]])
         ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
     def training_loop(self, msg):
@@ -632,13 +625,13 @@ class RobotTrainer:
         next_state = self.get_state_from_odom(msg)
 
         # Check boundaries and get allowed velocity
-        allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
+        #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
         
         temp_action = action
 
-        if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+        #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -648,7 +641,7 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            ##rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
+            ##rospy.sleep(self.SAMPLE_FREQ)                 # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
         if self.old_state is not None:
@@ -681,15 +674,14 @@ class RobotTrainer:
         np.savez(
                 f"./results/trajectory_{self.file_name}_{self.evaluation_count}.npz",
                 Trajectory=self.trajectory)
-
-        # Check boundaries and get allowed velocity
-        # allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.policy.select_action(next_state)                  # Select action
+
+        #print(action)
+
+        action[0] = np.clip(action[0], 0, 1)
         
         temp_action = action
-
-        # if is_outside: temp_action[0] = min(action[0], allowed_vel)     # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -699,13 +691,19 @@ class RobotTrainer:
         if not done:
             self.publish_velocity(temp_action)              # Execute action
             ##rospy.sleep(0.1)
+
+        # Add experience to replay buffer
+        if self.eval_flag:
+            if self.old_state is not None:
+                self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
         
+        # Update state and action
+        self.old_state = next_state if not done else None
+        self.old_action = action if not done else None
+
         # Reset episode if done
         if done:
             self.RESET = True
-            '''print("=============================================")
-            print("EVALUATION IS DONE - COMING HOME.")
-            print("=============================================")'''
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
@@ -740,6 +738,7 @@ class RobotTrainer:
 
                 self.average_success_list.append(avrg_success)
                 self.average_reward_list.append(avrg_reward)
+                self.eval_flag = False
 
                 np.savez(
                 f"./results/eval_{self.file_name}.npz",
@@ -756,14 +755,14 @@ class RobotTrainer:
 
     def callback(self, msg):
         """Callback method"""
-        elapsed_time = rospy.get_time() - self.initial_time
+        '''elapsed_time = rospy.get_time() - self.initial_time
 
         if  (elapsed_time // 3600) >= 40:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
             rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
+            return'''
         
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
@@ -791,7 +790,7 @@ def init():
     parser.add_argument("--seed", default=0, type=int)                          # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
-    parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size'''
+    parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=1e3, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=50, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
@@ -825,7 +824,7 @@ def init():
     # Define the action bounds
     action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = None # spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = None  #spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     kwargs = {
@@ -876,6 +875,7 @@ def main():
     # Initialize the robot trainer
     trainer = RobotTrainer(args, kargs, action_space, file_name)
     trainer.reset()                                                 # Reset to start
+    trainer.episode_count -= 1
     trainer.initial_time = rospy.get_time()
     trainer.start_time = rospy.get_time()                           # Init the episode time
     trainer.publish_velocity([0.0,0.0])                             # Stop the robot
