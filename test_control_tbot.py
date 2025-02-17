@@ -541,7 +541,7 @@ class RobotTrainer:
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.5  # Stop moving forward while correcting orientation
+                linear_velocity = 0.3  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -606,7 +606,7 @@ class RobotTrainer:
 
             if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
-                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
+                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count + 1}")
                 print("=============================================")
             else:
                 print("=============================================")
@@ -657,6 +657,13 @@ class RobotTrainer:
 
         # Reset episode if done
         if done:
+
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                self.evaluation_success_list.append(1)
+                print("=============================================")
+                print("YOU ARE AN IRONMAN")
+                print("=============================================")
+                
             self.RESET = True
             print("=============================================")
             print("EPISODE IS DONE - COMING HOME.")
