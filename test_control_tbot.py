@@ -616,7 +616,7 @@ class RobotTrainer:
             return
 
         # Publish the reorientation velocity commands
-        self.publish_velocity([linear_velocity / self.MAX_VEL[0], angular_velocity / self.MAX_VEL[1]])
+        self.publish_velocity([linear_velocity, angular_velocity])
         ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
     def training_loop(self, msg):
@@ -726,15 +726,15 @@ class RobotTrainer:
 
             print(f"Home Position: {self.HOME}")
 
-            if self.evaluation_count < 10:
+            if self.evaluation_count < 5:
                 self.evaluation_count += 1
                 self.episode_count -= 1
             else:
                 self.count_eval += 1
                 self.time_list.append(rospy.get_time())
                 self.evaluation_count = 0
-                avrg_reward = sum(self.evaluation_reward_list[-10:]) / 10
-                avrg_success = sum(self.evaluation_success_list[-10:]) / 10
+                avrg_reward = sum(self.evaluation_reward_list[-5:]) / 5
+                avrg_success = sum(self.evaluation_success_list[-5:]) / 5
 
                 self.average_success_list.append(avrg_success)
                 self.average_reward_list.append(avrg_reward)
@@ -755,14 +755,14 @@ class RobotTrainer:
 
     def callback(self, msg):
         """Callback method"""
-        '''elapsed_time = rospy.get_time() - self.initial_time
+        elapsed_time = rospy.get_time() - self.initial_time
 
-        if  (elapsed_time // 3600) >= 40:
+        if  (self.episode_count) >= 101:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
             rospy.signal_shutdown("EXITING. GOODBYE!")
-            return'''
+            return
         
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
@@ -792,7 +792,7 @@ def init():
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=1e3, type=int)		        # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=50, type=int)       	            # How often (episodes) we evaluate
+    parser.add_argument("--eval_freq", default=25, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
@@ -811,6 +811,7 @@ def init():
     parser.add_argument("--critic_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--OVER", default=2, type=float)
     parser.add_argument("--UNDER", default=0.5, type=float)
+    parser.add_argument("--lr", default=3e-4, type=float)
     args = parser.parse_args()
 
     file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
@@ -851,7 +852,8 @@ def init():
         "critic_estimations": args.critic_estimations,
         "OVER": args.OVER,
         "UNDER": args.UNDER,
-        "rect_action_flag": False
+        "rect_action_flag": False,
+        "lr": args.lr
     }
     
     # Create data folders

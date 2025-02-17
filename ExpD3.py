@@ -63,6 +63,7 @@ class DDPG(object):
 			OVER=2.,
 			UNDER=1.,
 			rect_action_flag= False,
+			lr=3e-4,
 			*args, **kargs):
 		self.max_action = max_action
 		self.noise_clip = noise_clip
@@ -71,11 +72,11 @@ class DDPG(object):
 		self.policy_freq = policy_freq
 		self.actor = Actor(state_dim, action_dim, max_action, hidden_size, rect_action_flag).to(device)
 		self.actor_target = copy.deepcopy(self.actor)
-		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
+		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
 
 		self.critic = Critic(state_dim, action_dim, hidden_size).to(device)
 		self.critic_target = copy.deepcopy(self.critic)
-		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
 
 		self.discount = discount
 		self.tau = tau
