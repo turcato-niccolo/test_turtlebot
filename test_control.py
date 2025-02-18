@@ -471,7 +471,7 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.1:
 
-            # Calculate the distance to home (r)
+            '''# Calculate the distance to home (r)
             r = distance_to_home
             # Calculate the angle to the home relative to the robot's orientation (gamma)
             gamma = angle_error
@@ -483,12 +483,12 @@ class RobotTrainer:
             linear_velocity = np.clip(k1 * r * np.cos(gamma), -self.MAX_VEL[0], self.MAX_VEL[0]) / self.MAX_VEL[0]
             # Compute the angular velocity
             angular_velocity = np.clip(k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta, -self.MAX_VEL[1], self.MAX_VEL[1]) / self.MAX_VEL[1]
-
             '''
+            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
-                angular_velocity = 1 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.05  # Stop moving forward while correcting orientation
+                angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
+                linear_velocity = 0.25  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -501,7 +501,7 @@ class RobotTrainer:
                 # Set angular velocity to 0, since we're aligned with the target
                 angular_velocity = 0.0
 
-                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")'''
+                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
@@ -512,16 +512,7 @@ class RobotTrainer:
             # Now, reorient the robot towards the goal position
             #rospy.loginfo("Reorienting robot towards goal position.")
             self.reorient_towards_goal(next_state)
-        '''
-        if distance_to_home > 0.1:
-            linear_velocity, angular_velocity = self.pid_control(distance_to_home, angle_error)
-        else:
-            linear_velocity = 0.0
-            angular_velocity = 0.0
-            rospy.loginfo("Arrived at Home!")
-            self.reorient_towards_goal()
-
-        self.publish_velocity([linear_velocity, angular_velocity])'''
+        
         # Update the old state for the next iteration
         self.old_state = None
 
@@ -562,7 +553,7 @@ class RobotTrainer:
 
             if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
-                print("HOME REACHED - STARTING THE EVALUATION")
+                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation}")
                 print("=============================================")
             else:
                 print("=============================================")
@@ -613,6 +604,10 @@ class RobotTrainer:
 
         # Reset episode if done
         if done:
+
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                print("YOU WIN")
+
             self.RESET = True
             print("=============================================")
             print(f"EPISODE {self.episode_count} IS DONE.")
@@ -642,6 +637,10 @@ class RobotTrainer:
         done = done or terminated                           # Episode termination
         self.evaluation_reward += reward                    # Update episode reward
 
+        # Update state and action
+        self.old_state = next_state if not done else None
+        self.old_action = action if not done else None
+
         if not done:
             self.publish_velocity(temp_action)              # Execute action
             ##rospy.sleep(0.1)
@@ -650,13 +649,14 @@ class RobotTrainer:
         if done:
             self.RESET = True
             print("=============================================")
-            print(f"EVALUATION {self.evaluation_count} IS DONE.")
+            print(f"EVALUATION {self.evaluation_count + 1} IS DONE.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
 
             self.evaluation_reward_list.append(self.evaluation_reward)
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                print("YOU WIN")
                 self.evaluation_success_list.append(1)
             else:
                 self.evaluation_success_list.append(0)
@@ -665,15 +665,15 @@ class RobotTrainer:
 
             self.evaluation_reward = 0
 
-            if self.evaluation_count < 9:
+            if self.evaluation_count < 4:
                 self.evaluation_count += 1
                 self.episode_count -= 1
             else:
                 self.count_eval += 1
                 self.time_list.append(self.total_training_time)
                 self.evaluation_count = 0
-                avrg_reward = sum(self.evaluation_reward_list[-10:]) / 10
-                avrg_success = sum(self.evaluation_success_list[-10:]) / 10
+                avrg_reward = sum(self.evaluation_reward_list[-5:]) / 5
+                avrg_success = sum(self.evaluation_success_list[-5:]) / 5
 
                 self.average_success_list.append(avrg_success)
                 self.average_reward_list.append(avrg_reward)
@@ -713,7 +713,7 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
 
-        if  (self.total_training_time // 3600) > 4:
+        if  (self.total_training_time // 3600) > 7:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
@@ -739,7 +739,7 @@ def init():
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=1e3, type=int)		        # Time steps initial random policy is used
-    parser.add_argument("--eval_freq", default=50, type=int)       	            # How often (episodes) we evaluate
+    parser.add_argument("--eval_freq", default=20, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate

@@ -1,13 +1,13 @@
-ò#!/bin/bash
+#!/bin/bash
 
 for seed in {0..3}; do
     python3 test_control.py \
-        --policy TD3 \
-        --hidden_size 256 \ò
-        --batch_size 256 \
+        --policy ExpD3 \
+        --hidden_size 64 \
+        --batch_size 128 \
         --seed $seed
 done
-ò
+
 
 : << 'COMMENT'
 
