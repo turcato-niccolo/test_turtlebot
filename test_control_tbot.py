@@ -58,7 +58,7 @@ class RobotTrainer:
         # Training statistics
         self.episode_count = 0
         self.count_eval = 0
-        self.evaluation_count = 0
+        self.evaluation_count = 1
         self.total_training_time = 0
         self.episode_rewards = []
         self.success_count = 0
@@ -606,7 +606,7 @@ class RobotTrainer:
 
             if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
-                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count + 1}")
+                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")
             else:
                 print("=============================================")
@@ -739,7 +739,7 @@ class RobotTrainer:
             else:
                 self.count_eval += 1
                 self.time_list.append(rospy.get_time())
-                self.evaluation_count = 0
+                self.evaluation_count = 1
                 avrg_reward = sum(self.evaluation_reward_list[-5:]) / 5
                 avrg_success = sum(self.evaluation_success_list[-5:]) / 5
 
