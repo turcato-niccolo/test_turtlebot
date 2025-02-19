@@ -25,7 +25,7 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [0.25, np.pi/4]
+        self.MAX_VEL = [0.4, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
@@ -183,8 +183,8 @@ class RobotTrainer:
             rospy.logerr(f"RL initialization failed: {e}")
     
     def load_model(self):
-        actor_params = pkl.load(open(f'actor_params_{self.file_name}.pkl', 'rb')) 
-        critic_params = pkl.load(open(f'critic_params_{self.file_name}.pkl', 'rb'))
+        actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
 
         '''actor_params = pkl.load(open(f'actor_params.pkl', 'rb')) 
         critic_params = pkl.load(open(f'critic_params.pkl', 'rb'))'''
