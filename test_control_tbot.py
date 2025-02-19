@@ -632,6 +632,7 @@ class RobotTrainer:
         self.publish_velocity([linear_velocity, angular_velocity])
 
     def rotate_to_goal(self, msg):
+        print("rotate")
         state = self.get_state_from_odom(msg)
 
         if self.stop_flag:
@@ -664,6 +665,7 @@ class RobotTrainer:
                 self.old_state = None
     
     def move_to_goal(self, msg):
+        print("move")
         state = self.get_state_from_odom(msg)
         
         # Compute distance and angle to the goal
@@ -672,7 +674,7 @@ class RobotTrainer:
             
         # Proportional controller with increased speed
         linear_speed = min(0.5 * distance, 0.5) / self.MAX_VEL[0]  # Increased max speed
-        angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[0]  # Increased max angular speed
+        angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[1]  # Increased max angular speed
             
         if distance < 0.05:  # Stop condition
             self.publish_velocity([0.0, 0.0])
