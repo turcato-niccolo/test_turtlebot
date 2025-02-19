@@ -745,7 +745,10 @@ class RobotTrainer:
 
             self.trajectory = []
 
-            self.HOME = np.array([-0.9, 0]) + np.random.uniform(-0.1, 0.1, size=(2,))
+            # Change initial position
+            r = np.sqrt(np.random.uniform(0,1))*0.1
+            theta = np.random.uniform(0,2*np.pi)
+            self.HOME = np.array([-1 + 0.1 * np.cos(theta), 0 + 0.1 * np.sin(theta)])
 
             print(f"Home Position: {self.HOME}")
 
