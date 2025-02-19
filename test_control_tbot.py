@@ -271,8 +271,8 @@ class RobotTrainer:
         yaw = self.yaw_from_quaternion(quaternion)
 
         x , y = self.homogeneous_transfomration([x, y])
-        yaw += np.pi / 2
-        
+        yaw -= np.pi / 2
+
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
         angular_vel = msg.twist.twist.angular.z
