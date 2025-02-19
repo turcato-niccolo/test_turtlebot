@@ -96,15 +96,6 @@ class RobotTrainer:
         self.eval_flag = True
 
         # Variable for come back
-        
-        # Fixed goal position
-        self.goal_x = self.HOME[0]
-        self.goal_y = self.HOME[1]
-        
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
-
         self.rotation_flag = True
         self.come_flag = False
         self.stop_flag = False
@@ -847,10 +838,10 @@ class RobotTrainer:
         if self.RESET:
             #self.come_back_home(msg)   # The robot is coming back home
             if self.rotation_flag:
-                self.rotate_to_goal()
+                self.rotate_to_goal(msg)
         
             if self.come_flag:
-                self.move_to_goal()
+                self.move_to_goal(msg)
 
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
