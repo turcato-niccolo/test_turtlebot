@@ -640,7 +640,7 @@ class RobotTrainer:
             angle_to_goal = atan2(np.array(self.HOME)[1] - state[1], np.array(self.HOME)[0] - state[0])
         
         if abs(angle_to_goal - state[2]) > 0.05:
-            angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0)
+            angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[1]
             self.publish_velocity([0.0, angular_speed])
         else:
             angular_speed = 0.0
@@ -671,8 +671,8 @@ class RobotTrainer:
         angle_to_goal = atan2(np.array(self.HOME)[1] - state[1], np.array(self.HOME)[0] - state[0])
             
         # Proportional controller with increased speed
-        linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
-        angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0)  # Increased max angular speed
+        linear_speed = min(0.5 * distance, 0.5) / self.MAX_VEL[0]  # Increased max speed
+        angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[0]  # Increased max angular speed
             
         if distance < 0.05:  # Stop condition
             self.publish_velocity([0.0, 0.0])
