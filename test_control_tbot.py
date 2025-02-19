@@ -433,7 +433,7 @@ class RobotTrainer:
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
 
-        print(v, w)
+        #print(v, w)
         
         d = 0.173
         r = 0.0325
