@@ -9,6 +9,7 @@ import sys
 from geometry_msgs.msg import Twist, Pose, Vector3
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
+from math import atan2, sqrt
 
 # from gym import spaces
 import pickle as pkl
@@ -25,7 +26,7 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [0.25, np.pi/4]
+        self.MAX_VEL = [0.4, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
@@ -93,7 +94,13 @@ class RobotTrainer:
         # Flags
         self.RESET = True
         self.eval_flag = True
-        
+
+        # Variable for come back
+        self.rotation_flag = True
+        self.come_flag = False
+        self.stop_flag = False
+
+
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
 
@@ -178,6 +185,9 @@ class RobotTrainer:
     def load_model(self):
         actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
         critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
+
+        '''actor_params = pkl.load(open(f'actor_params.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'critic_params.pkl', 'rb'))'''
 
         self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
         self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
@@ -502,8 +512,6 @@ class RobotTrainer:
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
-        # try:
-        #rospy.loginfo("Coming home.")
 
         # Ensure home position is defined
         if self.HOME is None:
@@ -514,6 +522,7 @@ class RobotTrainer:
         if self.GOAL is None:
             rospy.logerr("Goal position is not set.")
             return
+
 
         next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
         current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
@@ -528,10 +537,24 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
+            '''# Calculate the distance to home (r)
+            r = distance_to_home
+            # Calculate the angle to the home relative to the robot's orientation (gamma)
+            gamma = angle_error
+            # Calculate the heading correction (delta)
+            delta = gamma + current_yaw
+            # Control param
+            k1, k2, k3 = 0.6, 0.4, 0.1
+            # Compute the linear velocity
+            linear_velocity = k1 * r * np.cos(gamma)
+            # Compute the angular velocity
+            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
+
+            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.3  # Stop moving forward while correcting orientation
+                linear_velocity = 0.5  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -547,7 +570,7 @@ class RobotTrainer:
                 #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
-            self.publish_velocity([linear_velocity / self.MAX_VEL[0], angular_velocity / self.MAX_VEL[1]])
+            self.publish_velocity([linear_velocity, angular_velocity])
             ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
@@ -607,7 +630,60 @@ class RobotTrainer:
 
         # Publish the reorientation velocity commands
         self.publish_velocity([linear_velocity, angular_velocity])
-        ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
+
+    def rotate_to_goal(self, msg):
+        print("rotate")
+        state = self.get_state_from_odom(msg)
+
+        if self.stop_flag:
+            angle_to_goal = atan2(self.GOAL[1] - state[1], self.GOAL[0] - state[0])
+        else:
+            angle_to_goal = atan2(np.array(self.HOME)[1] - state[1], np.array(self.HOME)[0] - state[0])
+        
+        if abs(angle_to_goal - state[2]) > 0.05:
+            angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[1]
+            self.publish_velocity([0.0, angular_speed])
+        else:
+            angular_speed = 0.0
+            self.come_flag = True
+            self.rotation_flag = False
+
+            if self.stop_flag:
+                self.publish_velocity([0.0, angular_speed])
+                self.RESET = False
+                self.start_time = rospy.get_time()
+
+                if (self.episode_count % self.EVAL_FREQ) == 0:
+                    print("=============================================")
+                    print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
+                    print("=============================================")
+                else:
+                    print("=============================================")
+                    print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count}")
+                    print("=============================================")
+                
+                self.old_state = None
+    
+    def move_to_goal(self, msg):
+        print("move")
+        state = self.get_state_from_odom(msg)
+        
+        # Compute distance and angle to the goal
+        distance = sqrt((np.array(self.HOME)[0] - state[0])**2 + (np.array(self.HOME)[1] - state[1])**2)
+        angle_to_goal = atan2(np.array(self.HOME)[1] - state[1], np.array(self.HOME)[0] - state[0])
+            
+        # Proportional controller with increased speed
+        linear_speed = min(0.5 * distance, 0.5) / self.MAX_VEL[0]  # Increased max speed
+        angular_speed = min(2.0 * (angle_to_goal - state[2]), 2.0) / self.MAX_VEL[1]  # Increased max angular speed
+            
+        if distance < 0.05:  # Stop condition
+            self.publish_velocity([0.0, 0.0])
+
+            self.rotation_flag = True
+            self.come_flag = False
+            self.stop_flag = True
+        
+        self.publish_velocity([linear_speed, angular_speed])
 
     def training_loop(self, msg):
         # S,A,R,S',done
@@ -762,7 +838,13 @@ class RobotTrainer:
             return
         
         if self.RESET:
-            self.come_back_home(msg)   # The robot is coming back home
+            #self.come_back_home(msg)   # The robot is coming back home
+            if self.rotation_flag:
+                self.rotate_to_goal(msg)
+        
+            if self.come_flag:
+                self.move_to_goal(msg)
+
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
