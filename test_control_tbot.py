@@ -244,6 +244,17 @@ class RobotTrainer:
 
         return np.arctan2(siny_cosp, cosy_cosp)
 
+    def homogeneous_transfomration(self, vector):
+        H = np.array([[0, 1, 0],
+                      [-1, 0, -1],
+                      [0, 0, 1]])
+
+
+        vec_hom = np.append(vector, 1)
+        transformed_vec = H @ vec_hom
+
+        return transformed_vec[0], transformed_vec[1]
+
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
@@ -258,6 +269,9 @@ class RobotTrainer:
             msg.pose.pose.orientation.w
         )
         yaw = self.yaw_from_quaternion(quaternion)
+
+        x , y = self.homogeneous_transfomration([x, y])
+        yaw += np.pi / 2
         
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
