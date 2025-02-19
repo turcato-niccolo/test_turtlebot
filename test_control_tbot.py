@@ -433,6 +433,8 @@ class RobotTrainer:
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
 
+        print(v, w)
+        
         d = 0.173
         r = 0.0325
 
@@ -883,6 +885,12 @@ def init():
 
     if not os.path.exists("./models"):
         os.makedirs("./models")
+
+    if not os.path.exists("./images"):
+        os.makedirs("./images")
+
+    if not os.path.exists("./replay_buffers"):
+        os.makedirs("./replay_buffers")
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
