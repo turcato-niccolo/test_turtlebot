@@ -25,7 +25,7 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [0.25, np.pi/4]
+        self.MAX_VEL = [0.4, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
@@ -93,6 +93,13 @@ class RobotTrainer:
         # Flags
         self.RESET = True
         self.eval_flag = True
+        
+        # Spawn area limits
+        self.SPAWN_LIMITS = {
+            'x': (-0.95, -0.75),  
+            'y': (-0.15, 0.15),
+            'yaw': (-np.pi/4, np.pi/4)
+        }
         
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
@@ -178,6 +185,9 @@ class RobotTrainer:
     def load_model(self):
         actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
         critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
+
+        '''actor_params = pkl.load(open(f'actor_params.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'critic_params.pkl', 'rb'))'''
 
         self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
         self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
@@ -515,6 +525,7 @@ class RobotTrainer:
             rospy.logerr("Goal position is not set.")
             return
 
+
         next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
         current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
         home_position = np.array(self.HOME)
@@ -528,10 +539,24 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
+            '''# Calculate the distance to home (r)
+            r = distance_to_home
+            # Calculate the angle to the home relative to the robot's orientation (gamma)
+            gamma = angle_error
+            # Calculate the heading correction (delta)
+            delta = gamma + current_yaw
+            # Control param
+            k1, k2, k3 = 0.6, 0.4, 0.1
+            # Compute the linear velocity
+            linear_velocity = k1 * r * np.cos(gamma)
+            # Compute the angular velocity
+            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
+
+            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.3  # Stop moving forward while correcting orientation
+                linear_velocity = 0.5  # Stop moving forward while correcting orientation
                 #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
@@ -547,7 +572,7 @@ class RobotTrainer:
                 #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
-            self.publish_velocity([linear_velocity / self.MAX_VEL[0], angular_velocity / self.MAX_VEL[1]])
+            self.publish_velocity([linear_velocity, angular_velocity])
             ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
@@ -607,7 +632,6 @@ class RobotTrainer:
 
         # Publish the reorientation velocity commands
         self.publish_velocity([linear_velocity, angular_velocity])
-        ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
     def training_loop(self, msg):
         # S,A,R,S',done
