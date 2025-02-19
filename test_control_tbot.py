@@ -9,6 +9,7 @@ import sys
 from geometry_msgs.msg import Twist, Pose, Vector3
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
+from math import atan2, sqrt
 
 # from gym import spaces
 import pickle as pkl
@@ -93,14 +94,22 @@ class RobotTrainer:
         # Flags
         self.RESET = True
         self.eval_flag = True
+
+        # Variable for come back
         
-        # Spawn area limits
-        self.SPAWN_LIMITS = {
-            'x': (-0.95, -0.75),  
-            'y': (-0.15, 0.15),
-            'yaw': (-np.pi/4, np.pi/4)
-        }
+        # Fixed goal position
+        self.goal_x = self.HOME[0]
+        self.goal_y = self.HOME[1]
         
+        self.x = 0.0
+        self.y = 0.0
+        self.theta = 0.0
+
+        self.rotation_flag = True
+        self.come_flag = False
+        self.stop_flag = False
+
+
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
 
@@ -512,8 +521,6 @@ class RobotTrainer:
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
-        # try:
-        #rospy.loginfo("Coming home.")
 
         # Ensure home position is defined
         if self.HOME is None:
@@ -632,6 +639,58 @@ class RobotTrainer:
 
         # Publish the reorientation velocity commands
         self.publish_velocity([linear_velocity, angular_velocity])
+
+    def rotate_to_goal(self, msg):
+        state = self.get_state_from_odom(msg)
+
+        if self.stop_flag:
+            angle_to_goal = atan2(self.GOAL[1] - state[1], self.GOAL[0] - state[0])
+        else:
+            angle_to_goal = atan2(np.array(self.HOME)[1] - state[1], np.array(self.HOME)[0] - state[0])
+        
+        if abs(angle_to_goal - state[2]) > 0.05:
+            angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
+            self.publish_velocity([0.0, angular_speed])
+        else:
+            angular_speed = 0.0
+            self.come_flag = True
+            self.rotation_flag = False
+
+            if self.stop_flag:
+                self.publish_velocity([0.0, angular_speed])
+                self.RESET = False
+                self.start_time = rospy.get_time()
+
+                if (self.episode_count % self.EVAL_FREQ) == 0:
+                    print("=============================================")
+                    print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
+                    print("=============================================")
+                else:
+                    print("=============================================")
+                    print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count}")
+                    print("=============================================")
+                
+                self.old_state = None
+    
+    def move_to_goal(self, msg):
+        state = self.get_state_from_odom(msg)
+        
+        # Compute distance and angle to the goal
+        distance = sqrt((np.array(self.HOME)[0] - state[0])**2 + (np.array(self.HOME)[1] - state[1])**2)
+        angle_to_goal = atan2(np.arry(self.HOME)[1] - state[1], np.arry(self.HOME)[0] - state[0])
+            
+        # Proportional controller with increased speed
+        linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
+        angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)  # Increased max angular speed
+            
+        if distance < 0.05:  # Stop condition
+            self.publish_velocity([0.0, 0.0])
+
+            self.rotation_flag = True
+            self.come_flag = False
+            self.stop_flag = True
+        
+        self.publish_velocity([linear_speed, angular_speed])
 
     def training_loop(self, msg):
         # S,A,R,S',done
@@ -786,7 +845,13 @@ class RobotTrainer:
             return
         
         if self.RESET:
-            self.come_back_home(msg)   # The robot is coming back home
+            #self.come_back_home(msg)   # The robot is coming back home
+            if self.rotation_flag:
+                self.rotate_to_goal()
+        
+            if self.come_flag:
+                self.move_to_goal()
+
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
