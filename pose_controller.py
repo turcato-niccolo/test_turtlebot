@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import rospy
-import tf
 import random
 import time
 from nav_msgs.msg import Odometry
@@ -11,30 +10,36 @@ from math import atan2, sqrt
 
 class PoseController:
     def init(self):
-        rospy.init_node('pose_controller', anonymous=True)
-        self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)
-        #self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
-        rospy.Subscriber('/turtlebot_14/odom', Odometry, self.odom, queue_size=1)
-        
-        self.rate = rospy.Rate(100)
-        
-        # Random initial position inside a 2x2 meter area
-        self.init_x = 0
-        self.init_y = 0
-        
-        # Fixed goal position inside the same area
-        self.goal_x = -1
-        self.goal_y = 0
-        
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        try:
+            rospy.init_node('pose_controller', anonymous=True)
+            self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)
+            #self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
+            rospy.Subscriber('/turtlebot_14/odom', Odometry, self.odom, queue_size=1)
+            print("ROS initialization completed")
+            
+            self.rate = rospy.Rate(100)
+            
+            # Random initial position inside a 2x2 meter area
+            self.init_x = 0
+            self.init_y = 0
+            
+            # Fixed goal position inside the same area
+            self.goal_x = -1
+            self.goal_y = 0
+            
+            self.x = 0.0
+            self.y = 0.0
+            self.theta = 0.0
 
-        self.rotation_flag = True
-        self.come_flag = False
-        self.stop_flag = False
-        
-        self.start_time = None
+            self.rotation_flag = True
+            self.come_flag = False
+            self.stop_flag = False
+            
+            self.start_time = None
+            
+        except rospy.ROSException as e:
+            rospy.logerr(f"ROS initialization failed: {e}")
+            raise
     
     def yaw_from_quaternion(self, q):
         x, y, z, w = q
@@ -123,5 +128,7 @@ if __name__ == 'main':
         controller = PoseController()
         #controller.reset_simulation()
         controller.start_time = time.time()
+
+        print("START")
 
         rospy.spin()

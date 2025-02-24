@@ -111,7 +111,7 @@ class RobotTrainer:
         rospy.loginfo("Robot Trainer initialized successfully\n")
 
         print("=============================================")
-        print("START")
+        print("START - COMING HOME")
         print("=============================================")
 
     def _initialize_ros(self):
@@ -528,8 +528,6 @@ class RobotTrainer:
     
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
-        # try:
-        #rospy.loginfo("Coming home.")
 
         # Ensure home position is defined
         if self.HOME is None:
@@ -555,20 +553,6 @@ class RobotTrainer:
         # If the robot is far from home and needs to correct its orientation
         if distance_to_home > 0.05:
 
-            '''# Calculate the distance to home (r)
-            r = distance_to_home
-            # Calculate the angle to the home relative to the robot's orientation (gamma)
-            gamma = angle_error
-            # Calculate the heading correction (delta)
-            delta = gamma + current_yaw
-            # Control param
-            k1, k2, k3 = 0.6, 0.4, 0.1
-            # Compute the linear velocity
-            linear_velocity = k1 * r * np.cos(gamma)
-            # Compute the angular velocity
-            angular_velocity = k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta'''
-
-            
             # First, rotate the robot to face the home position if not aligned
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
@@ -589,12 +573,10 @@ class RobotTrainer:
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
-            ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
 
         else:
 
             # Now, reorient the robot towards the goal position
-            #rospy.loginfo("Reorienting robot towards goal position.")
             self.reorient_towards_goal(next_state)
 
         # Update the old state for the next iteration
@@ -602,7 +584,6 @@ class RobotTrainer:
 
     def reorient_towards_goal(self, state):
         """Reorient the robot towards the goal position."""
-        # try:
         # Ensure goal position is defined
         if self.GOAL is None:
             rospy.logerr("Goal position is not set.")
@@ -630,7 +611,6 @@ class RobotTrainer:
         else:
             angular_velocity = 0.0  # Already facing the goal
             linear_velocity = 0.0  # No movement since we only care about orientation
-            #rospy.loginfo("Robot is now facing the goal position.")
             self.RESET = False
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
@@ -716,8 +696,6 @@ class RobotTrainer:
             
         action = self.policy.select_action(next_state)                  # Select action
 
-        #print(action)
-
         action[0] = np.clip(action[0], 0, 1)
         
         temp_action = action
@@ -729,7 +707,6 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(temp_action)              # Execute action
-            ##rospy.sleep(0.1)
 
         # Add experience to replay buffer
         if self.eval_flag:
@@ -797,12 +774,11 @@ class RobotTrainer:
 
     def callback(self, msg):
         """Callback method"""
-        elapsed_time = rospy.get_time() - self.initial_time
+        #elapsed_time = rospy.get_time() - self.initial_time
 
         if  (self.episode_count) >= 101:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
-            ##rospy.sleep(2)
             rospy.signal_shutdown("EXITING. GOODBYE!")
             return
         
