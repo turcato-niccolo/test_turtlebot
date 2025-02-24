@@ -14,7 +14,7 @@ class PoseController:
             rospy.init_node('pose_controller', anonymous=True)
             self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)
             #self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
-            rospy.Subscriber('/turtlebot_14/odom', Odometry, self.odom, queue_size=1)
+            rospy.Subscriber('/turtlebot_14/odom', Odometry, self.callback, queue_size=1)
             print("ROS initialization completed")
             
             self.rate = rospy.Rate(100)
@@ -125,6 +125,7 @@ class PoseController:
 
 
 if __name__ == 'main':
+
         controller = PoseController()
         #controller.reset_simulation()
         controller.start_time = time.time()
