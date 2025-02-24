@@ -748,7 +748,7 @@ class RobotTrainer:
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
-                print("YOU ARE AN IRONMAN")
+                print("WIN")
                 print("=============================================")
             else:
                 self.evaluation_success_list.append(0)
@@ -771,7 +771,7 @@ class RobotTrainer:
                 self.episode_count -= 1
             else:
                 self.count_eval += 1
-                self.time_list.append(rospy.get_time())
+                self.time_list.append(rospy.get_time()- self.initial_time)
                 self.evaluation_count = 1
                 avrg_reward = sum(self.evaluation_reward_list[-5:]) / 5
                 avrg_success = sum(self.evaluation_success_list[-5:]) / 5
