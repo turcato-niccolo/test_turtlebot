@@ -691,7 +691,7 @@ class RobotTrainer:
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
-                print("YOU ARE AN IRONMAN")
+                print("WIN")
                 print("=============================================")
                 
             self.RESET = True
@@ -699,7 +699,9 @@ class RobotTrainer:
             print("EPISODE IS DONE - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
-            self.HOME = np.array([-0.9, 0]) + np.random.uniform(-0.1, 0.1, size=(2,))
+            r = np.sqrt(np.random.uniform(0,1))*0.1
+            theta = np.random.uniform(0,2*np.pi)
+            self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
             self.reset()
 
     def evaluation(self, msg):
@@ -762,9 +764,9 @@ class RobotTrainer:
             # Change initial position
             r = np.sqrt(np.random.uniform(0,1))*0.1
             theta = np.random.uniform(0,2*np.pi)
-            self.HOME = np.array([-1 + 0.1 * np.cos(theta), 0 + 0.1 * np.sin(theta)])
+            self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
 
-            print(f"Home Position: {self.HOME}")
+            print(f"COMING HOME - Position: {self.HOME:.2f}")
 
             if self.evaluation_count < 5:
                 self.evaluation_count += 1
