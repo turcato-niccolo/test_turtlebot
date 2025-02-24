@@ -691,7 +691,7 @@ class RobotTrainer:
         self.trajectory.append(next_state[:3])
 
         np.savez(
-                f"./results/trajectory_{self.file_name}_{self.evaluation_count}.npz",
+                f"./trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
                 Trajectory=self.trajectory)
             
         action = self.policy.select_action(next_state)                  # Select action
@@ -832,7 +832,8 @@ def init():
     parser.add_argument("--lr", default=3e-4, type=float)
     args = parser.parse_args()
 
-    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
+    #file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
+    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{2}"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -886,6 +887,11 @@ def init():
 
     if not os.path.exists("./replay_buffers"):
         os.makedirs("./replay_buffers")
+    
+    if not os.path.exists("./trajectories"):
+        os.makedirs("./trajectories")
+
+        
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
