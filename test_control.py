@@ -171,7 +171,7 @@ class RobotTrainer:
                 self.total_training_time = self.training_time[-1]
 
                 # Load replay buffer
-                with open(f"replay_buffer_{self.file_name}.pkl", 'rb') as f:
+                with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'rb') as f:
                     self.replay_buffer = pickle.load(f)
             
 
@@ -334,7 +334,7 @@ class RobotTrainer:
         self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
+        with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'wb') as f:
             pickle.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -356,7 +356,7 @@ class RobotTrainer:
             # Change initial position
             r = np.sqrt(np.random.uniform(0,1))*0.1
             theta = np.random.uniform(0,2*np.pi)
-            self.HOME = np.array([-1 + 0.1 * np.cos(theta), 0 + 0.1 * np.sin(theta)])
+            self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
             time.sleep(0.2)
             
             # Reset episode variables
@@ -713,7 +713,7 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
 
-        if  (self.total_training_time // 3600) > 7:
+        if  (self.total_training_time // 3600) >= 3:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             ##rospy.sleep(2)
@@ -722,8 +722,10 @@ class RobotTrainer:
         
         if (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
+            '''rospy.sleep(0.01)'''
         else:
-            self.training_loop(msg)    # The robot is running in the environment
+            self.training_loop(msg)
+            '''rospy.sleep(self.SAMPLE_FREQ)'''
 
 
 def init():
@@ -807,6 +809,9 @@ def init():
 
     if not os.path.exists("./models"):
         os.makedirs("./models")
+
+    if not os.path.exists("./replay_buffers"):
+        os.makedirs("./replay_buffers")
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
