@@ -36,6 +36,7 @@ class RobotTrainer:
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
+        self.seed = args.seed
 
         self.file_name = file_name
         
@@ -402,7 +403,7 @@ class RobotTrainer:
         self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
+        with open(f"./replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
             pkl.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -760,7 +761,7 @@ class RobotTrainer:
                 self.eval_flag = False
 
                 np.savez(
-                f"./results/eval_{self.file_name}.npz",
+                f"./results/eval_{self.file_name}_{self.seed}.npz",
                 Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
