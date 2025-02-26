@@ -391,7 +391,7 @@ class RobotTrainer:
 
         # Save stats
         np.savez(
-            f"./results/stats_{self.file_name}.npz",
+            f"./results/stats_{self.file_name}_{self.seed}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
             Success_Rate=self.success_list, 
