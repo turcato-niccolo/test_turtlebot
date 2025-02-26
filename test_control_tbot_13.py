@@ -247,7 +247,7 @@ class RobotTrainer:
 
     def homogeneous_transfomration(self, vector):
         H = np.array([[0, 1, 0],
-                      [-1, 0, -1],
+                      [-1, 0, 1],
                       [0, 0, 1]])
 
 
