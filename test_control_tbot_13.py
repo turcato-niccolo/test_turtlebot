@@ -36,6 +36,7 @@ class RobotTrainer:
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
+        self.seed = args.seed
 
         self.file_name = file_name
         
@@ -118,7 +119,7 @@ class RobotTrainer:
         """Initialize ROS nodes, publishers, and services"""
         try:
             # Initialize ROS node and publishers
-            rospy.init_node('robot_trainer', anonymous=True)                                    # Initialize ROS node
+            rospy.init_node('robot_trainer_13', anonymous=True)                                    # Initialize ROS node
             self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)                 # Initialize velocity publisher
             
             # Initialize odometry subscriber
@@ -246,7 +247,7 @@ class RobotTrainer:
 
     def homogeneous_transfomration(self, vector):
         H = np.array([[0, 1, 0],
-                      [-1, 0, 1],
+                      [-1, 0, -1],
                       [0, 0, 1]])
 
 
@@ -271,8 +272,10 @@ class RobotTrainer:
         yaw = self.yaw_from_quaternion(quaternion)
 
         x , y = self.homogeneous_transfomration([x, y])
-        yaw += np.pi
-        #print(f"{x} , {y}, {yaw}")
+        yaw += 2.8381249
+
+        yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
+
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
         angular_vel = msg.twist.twist.angular.z
@@ -402,7 +405,7 @@ class RobotTrainer:
         self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
+        with open(f"./replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
             pkl.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -760,7 +763,7 @@ class RobotTrainer:
                 self.eval_flag = False
 
                 np.savez(
-                f"./results/eval_{self.file_name}.npz",
+                f"./results/eval_{self.file_name}_{self.seed}.npz",
                 Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
