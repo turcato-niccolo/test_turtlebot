@@ -154,7 +154,7 @@ class RobotTrainer:
             if args.load_model != "":
                 policy_file = file_name if args.load_model == "default" else args.load_model
 
-                self.load_model()   # load the model as a pkl file
+                self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
                 #self.policy.load(f"./models/{policy_file}"
@@ -183,7 +183,7 @@ class RobotTrainer:
         except Exception as e:
             rospy.logerr(f"RL initialization failed: {e}")
     
-    def load_model(self):
+    def load_model(self, args):
         actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
         critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
 
@@ -203,12 +203,28 @@ class RobotTrainer:
         self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
         self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
         self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
-        self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
-        self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
-        self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
-        self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
-        self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
-        self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
+
+        if 'TD3' in args.policy:
+            w4 = critic_params[0]
+            w4 += np.random.randn(w4.shape) * 0.0001
+            b4 = critic_params[1]
+            b4 += np.random.randn(b4.shape) * 0.0001
+            w5 = critic_params[2]
+            w5 += np.random.randn(w4.shape) * 0.0001
+            b5 = critic_params[3]
+            b5 += np.random.randn(b4.shape) * 0.0001
+            w6 = critic_params[4]
+            w6 += np.random.randn(w4.shape) * 0.0001
+            b6 = critic_params[5]
+            b6 += np.random.randn(b4.shape) * 0.0001
+            
+            self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(w4, requires_grad=True))
+            self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(b4, requires_grad=True))
+            self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(w5, requires_grad=True))
+            self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(b5, requires_grad=True))
+            self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(w6, requires_grad=True))
+            self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(b6, requires_grad=True))
+        
 
         print("LOADED MODEL")
 
