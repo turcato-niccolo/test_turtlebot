@@ -403,7 +403,7 @@ class RobotTrainer:
         self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"replay_buffer_{self.file_name}.pkl", 'wb') as f:
+        with open(f"./replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
             pkl.dump(self.replay_buffer, f)
 
     def reset(self):
