@@ -206,17 +206,17 @@ class RobotTrainer:
 
         if 'TD3' in args.policy:
             w4 = critic_params[0]
-            w4 += np.random.randn(w4.shape) * 0.0001
+            w4 += np.random.randn(*w4.shape) * 0.0001
             b4 = critic_params[1]
-            b4 += np.random.randn(b4.shape) * 0.0001
+            b4 += np.random.randn(*b4.shape) * 0.0001
             w5 = critic_params[2]
-            w5 += np.random.randn(w5.shape) * 0.0001
+            w5 += np.random.randn(*w5.shape) * 0.0001
             b5 = critic_params[3]
-            b5 += np.random.randn(b5.shape) * 0.0001
+            b5 += np.random.randn(*b5.shape) * 0.0001
             w6 = critic_params[4]
-            w6 += np.random.randn(w6.shape) * 0.0001
+            w6 += np.random.randn(*w6.shape) * 0.0001
             b6 = critic_params[5]
-            b6 += np.random.randn(b6.shape) * 0.0001
+            b6 += np.random.randn(*b6.shape) * 0.0001
 
             self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(w4, requires_grad=True))
             self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(b4, requires_grad=True))
