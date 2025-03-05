@@ -261,7 +261,7 @@ class RobotTrainer:
 
         return np.arctan2(siny_cosp, cosy_cosp)
 
-    def homogeneous_transfomration(self, vector):
+    def homogeneous_transformation(self, vector):
         H = np.array([[0, 1, 0],
                       [-1, 0, 1],
                       [0, 0, 1]])
@@ -287,7 +287,7 @@ class RobotTrainer:
         )
         yaw = self.yaw_from_quaternion(quaternion)
 
-        x , y = self.homogeneous_transfomration([x, y])
+        x , y = self.homogeneous_transformation([x, y])
         yaw += 2.8381249
 
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
@@ -310,6 +310,7 @@ class RobotTrainer:
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
+            action[0] = (action[0] + 1) / 2 
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
@@ -715,7 +716,7 @@ class RobotTrainer:
             
         action = self.policy.select_action(next_state)                  # Select action
 
-        action[0] = np.clip(action[0], 0, 1)
+        action[0] = (action[0] + 1) / 2 
         
         temp_action = action
 
@@ -852,7 +853,7 @@ def init():
     args = parser.parse_args()
 
     #file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
-    file_name = f"ExpD3_{args.hidden_size}_{args.batch_size}_{2}"
+    file_name = f"ExpD3_{args.hidden_size}_{args.batch_size}_2"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)

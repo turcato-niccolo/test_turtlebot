@@ -308,6 +308,7 @@ class RobotTrainer:
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
+            action[0] = (action[0] + 1) / 2 
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
