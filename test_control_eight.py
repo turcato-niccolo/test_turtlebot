@@ -30,14 +30,14 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 1
-        self.MAX_VEL = [0.5, np.pi/4]
+        self.MAX_VEL = [0.2, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
-        self.MAX_TIME = 20
+        self.MAX_TIME = 45
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
@@ -243,16 +243,19 @@ class RobotTrainer:
     def eight_shape(self):
         # Parameters
         R = 1.0  # radius
-        t = np.linspace(0, 8 * np.pi, 8000)  # Time parameter from 0 to 8π
+        t = np.linspace(0, 2 * np.pi, 1414)  # Time parameter from 0 to 8π
 
         # Parametric equations for the 8-shape
         x = R * np.sin(t)
         y = R * np.sin(2 * t)
 
-        # Rotate by -45 degrees (-pi/4 radians)
-        theta = -np.pi / 4
-        x_rot = (x + y) / np.sqrt(2)
-        y_rot = (-x + y) / np.sqrt(2)
+        theta = np.pi / 6
+        R_matrix = np.array([[np.cos(theta), -np.sin(theta)], 
+                            [np.sin(theta),  np.cos(theta)]])
+
+        # Apply the rotation
+        xy_rotated = R_matrix @ np.vstack((x, y))
+        x_rot, y_rot = xy_rotated[0, :], xy_rotated[1, :]
 
         return np.array([x_rot[self.traj_count], y_rot[self.traj_count]])
 
@@ -643,7 +646,6 @@ class RobotTrainer:
         else:
             self.training_loop(msg)    # The robot is running in the environment'''
     
-
     def callback(self, msg):
         """Callback method"""
 

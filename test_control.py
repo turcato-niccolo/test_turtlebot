@@ -210,39 +210,37 @@ class RobotTrainer:
         
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
+        vel_x = linear_vel * np.cos(yaw)
+        vel_y = linear_vel * np.sin(yaw)
         angular_vel = msg.twist.twist.angular.z
         
-        # Distance and angle to goal
-        goal_distance = np.sqrt((self.GOAL[0] - x)**2 + (self.GOAL[1] - y)**2)
-        goal_angle = np.arctan2(self.GOAL[1] - y, self.GOAL[0] - x) - yaw
-        
-        # Normalize angle to [-pi, pi]
-        goal_angle = np.arctan2(np.sin(goal_angle), np.cos(goal_angle))
-        
-        return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
+        return np.array([x, y, yaw, vel_x, vel_y, angular_vel])
 
     def select_action(self, state):
+
+        '''if self.expl_noise > 0.1:
+            self.expl_noise = self.expl_noise - ((1 - 0.1) / 1e5)'''
+
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
+            action[0] = (action[0] + 1 ) / 2
             # Clip the linear velocity to be between 0 and 1
             action[0] = np.clip(action[0], 0, 1)
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
         else:
             # Random action sampling
-            action = np.random.normal(0, 1, size=self.ACTION_DIM)
+            action = np.random.uniform(-1, 1, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0], 0, 1)
-            # Clip the angular velocity to be between -1 and 1
-            action[1] = np.clip(action[1], -1, 1)
+            action[0] = (action[0] + 1 ) / 2
 
         return action
 
-    def compute_reward(self, state, next_state):
+    '''def compute_reward(self, state, next_state):
         """Reward computation"""
 
         p = np.array(next_state[:2])
@@ -290,7 +288,41 @@ class RobotTrainer:
             self.success = 1
             self.collision = 0
         
-        return reward, terminated
+        return reward, terminated'''
+
+    def compute_reward(self, state, next_state):
+        """
+        Compute a reward ensuring non-negativity and that reaching the goal yields the maximum reward.
+        """
+        
+        # Extract the robot's current position and compute its Euclidean distance to the goal.
+        p = np.array(next_state[:2])
+        dist_to_goal = np.linalg.norm(p - self.GOAL)
+
+        reward = np.exp(-2*dist_to_goal) -0.01
+
+        # --- Check for termination conditions ---
+        # Boundary check: if the robot is outside the allowed region.
+        bound = self.WALL_DIST + 0.2
+        if np.abs(p[0]) >= bound or np.abs(p[1]) >= bound:
+            return 0, True
+
+        # Obstacle collision: if the robot collides with the rectangular object.
+        if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
+            self.collision_count += 1
+            self.success = 0
+            self.collision = 1
+            return 0, True
+
+        # Goal check: if the robot is within the goal threshold.
+        if dist_to_goal <= self.GOAL_DIST:
+            self.success_count += 1
+            self.success = 1
+            self.collision = 0
+            return reward + 1, False
+
+        #print(reward)
+        return reward, False
 
     def log_episode_stats(self, episode_time):
         """Log detailed episode statistics"""
@@ -374,198 +406,6 @@ class RobotTrainer:
         vel_msg.angular.z = action[1] * self.MAX_VEL[1]     # Scale to actual angular velocity
         self.cmd_vel_pub.publish(vel_msg)
 
-    def check_boundaries(self, x, y, theta, max_linear_vel):
-        """Check if robot is at boundaries and control its movement."""
-
-        # Define map limits
-        X_MIN, X_MAX = -self.WALL_DIST, self.WALL_DIST
-        Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
-        
-        # Small margin to detect boundary approach
-        MARGIN = 0.1
-        
-        # Check if robot is near boundaries
-        at_x_min = x <= X_MIN + MARGIN # Check if robot is at the bottom
-        at_x_max = x >= X_MAX - MARGIN # Check if robot is at the top
-        at_y_min = y <= Y_MIN + MARGIN # Check if robot is at the right
-        at_y_max = y >= Y_MAX - MARGIN # Check if robot is at the left
-        
-        is_at_boundary = at_x_min or at_x_max or at_y_min or at_y_max
-        
-        if not is_at_boundary:
-            return max_linear_vel, False
-        
-        '''# Calculate if the robot is pointing inward
-        if at_y_min: # Right boundary
-            min = np.arctan2(X_MAX - x, Y_MIN - y)
-            max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_y_max: # Left boundary
-            min = np.arctan2(Y_MAX - y, X_MIN - x)
-            max = 2*np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_min: # Bottom boundary
-            min = np.arctan2(X_MIN - x, Y_MIN - y) - np.pi /2
-            max = np.pi - np.arctan2(Y_MAX - y, X_MIN - x) - np.pi /2
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_max: # Top Boundary
-            min = np.pi/2 - np.arctan2(X_MAX - x, Y_MAX - y)
-            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
-            if theta > min and theta < max: return max_linear_vel, True
-            
-        allowed_linear_vel = 0.0'''
-        
-        # Calculate the direction vector pointing inward
-        target_x = 0
-        target_y = 0
-        
-        # Calculate angle to center of map
-        angle_to_center = np.arctan2(target_y - y, target_x - x)
-        
-        # Normalize angles to [-pi, pi]
-        theta = np.arctan2(np.sin(theta), np.cos(theta))
-        angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
-                            np.cos(angle_to_center - theta))
-        
-        # Check if robot is pointing inward (within 90 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/2
-        
-        # Calculate allowed linear velocity
-        if pointing_inward:
-            allowed_linear_vel = max_linear_vel
-        else:
-            # Stop linear movement if pointing outward
-            allowed_linear_vel = 0.0
-        
-        return allowed_linear_vel, True
-    
-    def come_back_home(self, msg):
-        """Navigate the robot back to the home position and then reorient towards the goal."""
-        # try:
-        #rospy.loginfo("Coming home.")
-
-        # Ensure home position is defined
-        if self.HOME is None:
-            rospy.logerr("Home position is not set.")
-            return
-
-        # Ensure goal position is defined
-        if self.GOAL is None:
-            rospy.logerr("Goal position is not set.")
-            return
-
-
-        next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
-        current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
-        home_position = np.array(self.HOME)
-        distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
-        current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
-        direction = home_position - current_position                            # Calculate Direction
-        desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
-        angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
-        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi               # Normalize to [-pi, pi]
-
-        # If the robot is far from home and needs to correct its orientation
-        if distance_to_home > 0.1:
-
-            '''# Calculate the distance to home (r)
-            r = distance_to_home
-            # Calculate the angle to the home relative to the robot's orientation (gamma)
-            gamma = angle_error
-            # Calculate the heading correction (delta)
-            delta = gamma + current_yaw
-            # Control param
-            k1, k2, k3 = 1.7, 0.9, 0.3
-            # Compute the linear velocity
-            linear_velocity = np.clip(k1 * r * np.cos(gamma), -self.MAX_VEL[0], self.MAX_VEL[0]) / self.MAX_VEL[0]
-            # Compute the angular velocity
-            angular_velocity = np.clip(k2 * gamma + k1 * np.sin(gamma) * np.cos(gamma) * gamma + k3 * delta, -self.MAX_VEL[1], self.MAX_VEL[1]) / self.MAX_VEL[1]
-            '''
-            
-            # First, rotate the robot to face the home position if not aligned
-            if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
-                angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
-                linear_velocity = 0.25  # Stop moving forward while correcting orientation
-                #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
-            else:
-                # Once aligned, move towards the home position
-                direction = home_position - current_position
-                direction /= distance_to_home  # Normalize direction vector
-
-                # Calculate linear velocity (capped by maximum velocity)
-                linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
-
-                # Set angular velocity to 0, since we're aligned with the target
-                angular_velocity = 0.0
-
-                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
-
-            # Publish velocity commands to move the robot
-            self.publish_velocity([linear_velocity, angular_velocity])
-            ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
-
-        else:
-
-            # Now, reorient the robot towards the goal position
-            #rospy.loginfo("Reorienting robot towards goal position.")
-            self.reorient_towards_goal(next_state)
-        
-        # Update the old state for the next iteration
-        self.old_state = None
-
-    def reorient_towards_goal(self, state):
-        """Reorient the robot towards the goal position."""
-        # try:
-        # Ensure goal position is defined
-        if self.GOAL is None:
-            rospy.logerr("Goal position is not set.")
-            return
-
-        # Get the current position and the goal position
-        current_position = np.array(state[:2])  # Assuming old_state contains [x, y]
-        goal_position = np.array(self.GOAL)
-
-        # Calculate the desired angle to goal
-        desired_angle_to_goal = np.arctan2(goal_position[1] - current_position[1], goal_position[0] - current_position[0])
-
-        # Get the current yaw (orientation)
-        current_yaw = state[2]  # Assuming yaw is in the third element of old_state
-
-        # Calculate the angle difference (heading error) for reorientation
-        angle_error = desired_angle_to_goal - current_yaw
-        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
-
-        # Rotate towards the goal if necessary
-        if abs(angle_error) > 0.1:  # A threshold for alignment
-            angular_velocity = 2 * np.sign(angle_error)  # Rotate towards goal
-            linear_velocity = 0.0  # Stop moving forward while rotating
-            #rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
-        else:
-            angular_velocity = 0.0  # Already facing the goal
-            linear_velocity = 0.0  # No movement since we only care about orientation
-            #rospy.loginfo("Robot is now facing the goal position.")
-            self.RESET = False
-            self.start_time = rospy.get_time()
-            self.publish_velocity([linear_velocity, angular_velocity])
-
-            if (self.episode_count % self.EVAL_FREQ) == 0:
-                print("=============================================")
-                print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation}")
-                print("=============================================")
-            else:
-                print("=============================================")
-                print("HOME REACHED - STARTING THE EPISODE")
-                print("=============================================")
-
-            return
-
-        # Publish the reorientation velocity commands
-        self.publish_velocity([linear_velocity, angular_velocity])
-        ##rospy.sleep(0.1)  # Simulate real-time control loop for responsiveness
-
     def training_loop(self, msg):
         # S,A,R,S',done
         done = self.check_timeout()
@@ -582,6 +422,8 @@ class RobotTrainer:
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
+        #print(reward)
+
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
         self.steps_in_episode += 1                          # Update episode steps
@@ -591,7 +433,7 @@ class RobotTrainer:
             ##rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
-        if self.old_state is not None:
+        if self.old_state is not None and self.episode_count > 1:
             self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
             
         # Train policy
@@ -610,7 +452,7 @@ class RobotTrainer:
 
             self.RESET = True
             print("=============================================")
-            print(f"EPISODE {self.episode_count} IS DONE.")
+            print(f"EPISODE {self.episode_count} - Reward: {self.current_episode_reward:.3} - Exp noise {self.expl_noise:.3}")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             self.reset()
@@ -618,19 +460,12 @@ class RobotTrainer:
     def evaluation(self, msg):
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
-
-        # Check boundaries and get allowed velocity
-        # allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.policy.select_action(next_state)                  # Select action
-        # Clip the linear velocity to be between 0 and 1
-        action[0] = np.clip(action[0], 0, 1)
-        # Clip the angular velocity to be between -1 and 1
-        action[1] = np.clip(action[1], -1, 1)
+
+        action[0] = (action[0] + 1 ) / 2
         
         temp_action = action
-
-        # if is_outside: temp_action[0] = min(action[0], allowed_vel)     # If is outside set lin vel to zero
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -644,7 +479,10 @@ class RobotTrainer:
         if not done:
             self.publish_velocity(temp_action)              # Execute action
             ##rospy.sleep(0.1)
-        
+
+        if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                print("YOU WIN")
+
         # Reset episode if done
         if done:
             self.RESET = True
@@ -709,7 +547,6 @@ class RobotTrainer:
         else:
             self.training_loop(msg)    # The robot is running in the environment'''
     
-
     def callback(self, msg):
         """Callback method"""
 
@@ -722,10 +559,9 @@ class RobotTrainer:
         
         if (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
-            '''rospy.sleep(0.01)'''
         else:
             self.training_loop(msg)
-            '''rospy.sleep(self.SAMPLE_FREQ)'''
+            #rospy.sleep(self.SAMPLE_FREQ)
 
 
 def init():
@@ -740,7 +576,7 @@ def init():
     parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
-    parser.add_argument("--start_timesteps", default=1e3, type=int)		        # Time steps initial random policy is used
+    parser.add_argument("--start_timesteps", default=5e3, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=20, type=int)       	            # How often (episodes) we evaluate
     parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
