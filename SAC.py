@@ -16,7 +16,7 @@ class SAC(object):
                  policy="Gaussian",
                  target_update_interval=1,
                  automatic_entropy_tuning=True,
-                 hidden_size=256,
+                 hidden_size=64,
                  lr=3e-4):
 
         self.gamma = gamma
@@ -72,14 +72,14 @@ class SAC(object):
         self.updates += 1
         # Sample a batch from memory
         state_batch, action_batch, next_state_batch, reward_batch, mask_batch = memory.sample(batch_size=batch_size)
-        '''
+
         # Convert to tensor and move to device
-        state_batch = torch.FloatTensor(state_batch).to(self.device)
-        next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
-        action_batch = torch.FloatTensor(action_batch).to(self.device)
-        reward_batch = torch.FloatTensor(reward_batch).to(self.device)
-        mask_batch = torch.FloatTensor(mask_batch).to(self.device)
-        '''
+        state_batch = state_batch.clone().detach().to(dtype=torch.float32, device=self.device)
+        next_state_batch = next_state_batch.clone().detach().to(dtype=torch.float32, device=self.device)
+        action_batch = action_batch.clone().detach().to(dtype=torch.float32, device=self.device)
+        reward_batch = reward_batch.clone().detach().to(dtype=torch.float32, device=self.device)
+        mask_batch = mask_batch.clone().detach().to(dtype=torch.float32, device=self.device)
+        
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)

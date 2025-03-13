@@ -3,3 +3,6 @@ logs
 .DS_Store
 data/
 .idea
+results/
+models/
+replay_buffers/

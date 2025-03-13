@@ -6,6 +6,7 @@ import numpy as np
 import tf
 import os
 import time
+from datetime import datetime
 import sys
 
 from nav_msgs.msg import Odometry
@@ -144,7 +145,8 @@ class RobotTrainer:
             elif 'TD3' in args.policy:
                 self.policy = TD3.TD3(**kwargs)
             elif 'SAC' in args.policy:
-                self.policy = SAC.SAC(kwargs["state_dim"], action_space)
+                self.policy = SAC.SAC(**kwargs)
+                self.expl_noise = 0.0
             elif 'ExpD3' in args.policy:
                 self.policy = ExpD3.DDPG(**kwargs)
             else:
@@ -424,7 +426,8 @@ class RobotTrainer:
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
             
-        action = self.policy.select_action(next_state)                  # Select action
+        action = self.policy.select_action(next_state, evaluate=True)     # Select action
+        # action = self.policy.select_action(next_state)                  # Select action
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -439,9 +442,6 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(a_in)              # Execute action
-
-        '''if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
-                print("YOU WIN")'''
 
         # Reset episode if done
         if done:
@@ -554,33 +554,47 @@ def init():
     action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
-    kwargs = {
-        "state_dim": state_dim,
-        "action_dim": action_dim,
-        "max_action": max_action,
-        "batch_size": args.batch_size,
-        "hidden_size": args.hidden_size,
-        "start_timesteps": args.start_timesteps,
-        "eval_freq": args.eval_freq,
-        "max_timesteps": args.max_timesteps,
-        "--expl_noise": args.expl_noise,
-        "discount": args.discount,
-        "tau": args.tau,
-        "policy_noise": args.policy_noise * max_action,
-        "noise_clip": args.noise_clip * max_action,
-        "policy_freq": args.policy_freq,
-        "n_q": args.n_q,
-        "bootstrap": args.bootstrap,
-        "min_q": args.min_q > 0,
-        "entropy_decay": args.entropy_decay,
-        "entropy_factor": args.entropy_factor,
-        "target_estimations": args.target_estimations,
-        "critic_estimations": args.critic_estimations,
-        "OVER": args.OVER,
-        "UNDER": args.UNDER,
-        "rect_action_flag": False
-    }
-    
+    if args.policy == "SAC":
+        kwargs = {
+			"num_inputs": state_dim,             	# The state dimension
+			"action_space": action_space,     	    # The action space object
+			"gamma": args.discount,               	# Discount factor
+			"tau": args.tau,                     	# Soft update parameter
+			"alpha": 0.2,                        	# Initial alpha for entropy
+			"policy": "Gaussian",                 	# Policy type (for SAC)
+			"target_update_interval": 2,          	# Frequency of target network updates
+			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
+			"hidden_size": args.hidden_size,        # Size of hidden layers
+			"lr": 3e-4                            	# Learning rate
+		}
+    else:
+        kwargs = {
+            "state_dim": state_dim,
+            "action_dim": action_dim,
+            "max_action": max_action,
+            "batch_size": args.batch_size,
+            "hidden_size": args.hidden_size,
+            "start_timesteps": args.start_timesteps,
+            "eval_freq": args.eval_freq,
+            "max_timesteps": args.max_timesteps,
+            "--expl_noise": args.expl_noise,
+            "discount": args.discount,
+            "tau": args.tau,
+            "policy_noise": args.policy_noise * max_action,
+            "noise_clip": args.noise_clip * max_action,
+            "policy_freq": args.policy_freq,
+            "n_q": args.n_q,
+            "bootstrap": args.bootstrap,
+            "min_q": args.min_q > 0,
+            "entropy_decay": args.entropy_decay,
+            "entropy_factor": args.entropy_factor,
+            "target_estimations": args.target_estimations,
+            "critic_estimations": args.critic_estimations,
+            "OVER": args.OVER,
+            "UNDER": args.UNDER,
+            "rect_action_flag": False
+        }
+
     # Create data folders
     if not os.path.exists("./results"):
         os.makedirs("./results")
