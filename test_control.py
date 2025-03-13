@@ -218,8 +218,8 @@ class RobotTrainer:
 
     def select_action(self, state):
 
-        '''if self.expl_noise > 0.1:
-            self.expl_noise = self.expl_noise - ((1 - 0.1) / 1e5)'''
+        if self.expl_noise > 0.1:
+            self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 5e4)
 
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
@@ -227,20 +227,17 @@ class RobotTrainer:
             action = self.policy.select_action(np.array(state))
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
-            action[0] = (action[0] + 1 ) / 2
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0], 0, 1)
+            action[0] = np.clip(action[0], -1, 1)
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
         else:
             # Random action sampling
             action = np.random.uniform(-1, 1, size=self.ACTION_DIM)
-            # Clip the linear velocity to be between 0 and 1
-            action[0] = (action[0] + 1 ) / 2
 
         return action
 
-    '''def compute_reward(self, state, next_state):
+    def compute_reward(self, state, next_state):
         """Reward computation"""
 
         p = np.array(next_state[:2])
@@ -288,41 +285,7 @@ class RobotTrainer:
             self.success = 1
             self.collision = 0
         
-        return reward, terminated'''
-
-    def compute_reward(self, state, next_state):
-        """
-        Compute a reward ensuring non-negativity and that reaching the goal yields the maximum reward.
-        """
-        
-        # Extract the robot's current position and compute its Euclidean distance to the goal.
-        p = np.array(next_state[:2])
-        dist_to_goal = np.linalg.norm(p - self.GOAL)
-
-        reward = np.exp(-2*dist_to_goal) -0.01
-
-        # --- Check for termination conditions ---
-        # Boundary check: if the robot is outside the allowed region.
-        bound = self.WALL_DIST + 0.2
-        if np.abs(p[0]) >= bound or np.abs(p[1]) >= bound:
-            return 0, True
-
-        # Obstacle collision: if the robot collides with the rectangular object.
-        if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
-            self.collision_count += 1
-            self.success = 0
-            self.collision = 1
-            return 0, True
-
-        # Goal check: if the robot is within the goal threshold.
-        if dist_to_goal <= self.GOAL_DIST:
-            self.success_count += 1
-            self.success = 1
-            self.collision = 0
-            return reward + 1, False
-
-        #print(reward)
-        return reward, False
+        return reward, terminated
 
     def log_episode_stats(self, episode_time):
         """Log detailed episode statistics"""
@@ -415,8 +378,6 @@ class RobotTrainer:
         #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
-        
-        temp_action = action
 
         #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
 
@@ -428,9 +389,11 @@ class RobotTrainer:
         self.current_episode_reward += reward               # Update episode reward
         self.steps_in_episode += 1                          # Update episode steps
 
+        a_in = [(action[0] + 1) / 2, action[1]]
+
         if not done:
-            self.publish_velocity(temp_action)              # Execute action
-            ##rospy.sleep(self.SAMPLE_FREQ)                   # Delay for simulating real-time operation 10 Hz
+            self.publish_velocity(a_in)                     # Execute action
+            ##rospy.sleep(self.SAMPLE_FREQ)                 # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
         if self.old_state is not None and self.episode_count > 1:
@@ -452,7 +415,7 @@ class RobotTrainer:
 
             self.RESET = True
             print("=============================================")
-            print(f"EPISODE {self.episode_count} - Reward: {self.current_episode_reward:.3} - Exp noise {self.expl_noise:.3}")
+            print(f"EPISODE {self.episode_count} - Reward: {self.current_episode_reward:.3f} - Exp noise {self.expl_noise:.3}")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             self.reset()
@@ -463,10 +426,6 @@ class RobotTrainer:
             
         action = self.policy.select_action(next_state)                  # Select action
 
-        action[0] = (action[0] + 1 ) / 2
-        
-        temp_action = action
-
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
         done = done or terminated                           # Episode termination
@@ -476,12 +435,13 @@ class RobotTrainer:
         self.old_state = next_state if not done else None
         self.old_action = action if not done else None
 
-        if not done:
-            self.publish_velocity(temp_action)              # Execute action
-            ##rospy.sleep(0.1)
+        a_in = [(action[0] + 1) / 2, action[1]]
 
-        if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
-                print("YOU WIN")
+        if not done:
+            self.publish_velocity(a_in)              # Execute action
+
+        '''if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+                print("YOU WIN")'''
 
         # Reset episode if done
         if done:
@@ -528,24 +488,6 @@ class RobotTrainer:
                 print(f"Average Success: {self.average_success_list[-1]:.2f}")
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
-
-    '''def callback(self, msg):
-        """Callback method"""
-        elapsed_time = rospy.get_time() - self.initial_time
-
-        if  (elapsed_time // 3600) >= 40:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            ##rospy.sleep(2)
-            rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
-        
-        if self.RESET:
-            self.come_back_home(msg)   # The robot is coming back home
-        elif (self.episode_count % self.EVAL_FREQ) == 0:
-            self.evaluation(msg)
-        else:
-            self.training_loop(msg)    # The robot is running in the environment'''
     
     def callback(self, msg):
         """Callback method"""
@@ -553,7 +495,6 @@ class RobotTrainer:
         if  (self.total_training_time // 3600) >= 3:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
-            ##rospy.sleep(2)
             rospy.signal_shutdown("EXITING. GOODBYE!")
             return
         
@@ -561,7 +502,8 @@ class RobotTrainer:
             self.evaluation(msg)
         else:
             self.training_loop(msg)
-            #rospy.sleep(self.SAMPLE_FREQ)
+
+
 
 
 def init():
