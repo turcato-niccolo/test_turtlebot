@@ -661,7 +661,7 @@ class RobotTrainer:
             ##rospy.sleep(self.SAMPLE_FREQ)                 # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
-        if self.old_state is not None:
+        if self.old_state is not None and self.episode_count > 1:
             self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
             
         # Train policy
