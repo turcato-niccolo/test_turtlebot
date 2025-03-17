@@ -106,7 +106,6 @@ def main():
 
     env = GazeboEnv()
     time.sleep(1)
-    state = env.reset()
 
     state_dim = 6
     action_dim = 2

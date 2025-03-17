@@ -48,7 +48,7 @@ class GazeboEnv:
         
         # Initialize odometry subscriber
         rospy.Subscriber('/vicon/turtlebot_14', Vector3, self.callback, queue_size=1)
-        
+
         print("ENV INIT...")
 
     def callback(self, msg):
@@ -110,11 +110,7 @@ class GazeboEnv:
     def reset(self):
 
         # Publish velocity commands to stop the robot
-        vel_msg = Twist()
-        vel_msg.linear.x = 0
-        vel_msg.angular.z = 0
-        self.cmd_vel_pub.publish(vel_msg)
-        
+        self.publish_action([0,0])
         state = self.state
 
         r = np.sqrt(np.random.uniform(0,1))*0.1
