@@ -135,6 +135,9 @@ def main():
 
     print("START TRAINING...\n")
 
+    state, home = env.reset()
+    come_home(env, home)
+
     while (rospy.get_time() // 3600) < max_time:
 
         if timestep > 1e3:

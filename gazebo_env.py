@@ -48,8 +48,7 @@ class GazeboEnv:
         
         # Initialize odometry subscriber
         rospy.Subscriber('/vicon/turtlebot_14', Vector3, self.callback, queue_size=1)
-
-        self.reset_simulation()
+        
         print("ENV INIT...")
 
     def callback(self, msg):
