@@ -44,7 +44,7 @@ def parse_args():
     # Define the action bounds
     action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = None #spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     if args.policy == "SAC":
