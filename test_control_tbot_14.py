@@ -608,7 +608,7 @@ class RobotTrainer:
         if done:
 
             if self.expl_noise > 0.05:
-                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 1e3)
+                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 500)
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
