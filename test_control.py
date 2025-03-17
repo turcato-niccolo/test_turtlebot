@@ -327,8 +327,6 @@ class RobotTrainer:
             Training_Time=self.training_time,
             Total_Steps=self.total_steps
         )
-        # Save model
-        self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
         with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'wb') as f:
@@ -375,17 +373,10 @@ class RobotTrainer:
         # S,A,R,S',done
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
-
-        # Check boundaries and get allowed velocity
-        #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
 
-        #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
-
         reward, terminated = self.compute_reward(self.old_state, next_state)
-
-        #print(reward)
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -395,7 +386,6 @@ class RobotTrainer:
 
         if not done:
             self.publish_velocity(a_in)                     # Execute action
-            ##rospy.sleep(self.SAMPLE_FREQ)                 # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
         if self.old_state is not None and self.episode_count > 1:
@@ -426,8 +416,8 @@ class RobotTrainer:
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
             
-        action = self.policy.select_action(next_state, evaluate=True)     # Select action
-        # action = self.policy.select_action(next_state)                  # Select action
+        #action = self.policy.select_action(next_state, evaluate=True)     # Select action
+        action = self.policy.select_action(next_state)     # Select action
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -488,6 +478,9 @@ class RobotTrainer:
                 print(f"Average Success: {self.average_success_list[-1]:.2f}")
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
+
+                # Save model
+                self.policy.save(f"./models/{self.count_eval}_{self.file_name}")
     
     def callback(self, msg):
         """Callback method"""
