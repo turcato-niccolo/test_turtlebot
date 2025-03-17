@@ -16,7 +16,7 @@ class SAC(object):
                  policy="Gaussian",
                  target_update_interval=1,
                  automatic_entropy_tuning=True,
-                 hidden_size=256,
+                 hidden_size=64,
                  lr=3e-4):
 
         self.gamma = gamma
@@ -28,7 +28,7 @@ class SAC(object):
         self.automatic_entropy_tuning = automatic_entropy_tuning
 
         # Check for cuda device
-        self.device = "cuda:0" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
+        self.device = "cpu" # "cuda:0" #torch.device("cuda" if args.cuda else "cpu")
         '''
         # Check for apple metal device
         if torch.backends.mps.is_available():
