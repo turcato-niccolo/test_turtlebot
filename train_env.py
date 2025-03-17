@@ -38,7 +38,9 @@ def choose_policy(args, kwargs):
 
 def come_home(env, home):
     print("COMING HOME")
-    state = env.get_state()
+    while state is not None:
+        state = env.get_state()
+        
     position = state[:2]
     yaw = state[2]
     
