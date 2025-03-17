@@ -691,7 +691,7 @@ class RobotTrainer:
                 
             self.RESET = True
             print("=============================================")
-            print("fEPISODE IS DONE - Reward: {self.current_episode_reward} - COMING HOME.")
+            print(f"EPISODE IS DONE - Reward: {self.current_episode_reward} - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             r = np.sqrt(np.random.uniform(0,1))*0.1
@@ -793,7 +793,7 @@ class RobotTrainer:
         elapsed_time = rospy.get_time() - self.initial_time
 
         #if  (self.episode_count) >= 101:
-        if  (elapsed_time // 3600) >= 3:
+        if  (elapsed_time // 3600) >= 6:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
@@ -801,7 +801,7 @@ class RobotTrainer:
         
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
-        elif (self.episode_count % self.EVAL_FREQ) == 0:
+        elif (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
             self.evaluation(msg)
         else:
             self.training_loop(msg)    # The robot is running in the environment
