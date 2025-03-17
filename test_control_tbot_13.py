@@ -44,7 +44,7 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
+        self.GOAL_DIST = 0.5
         self.OBST_W = 0.5
         self.OBST_D = 0.2
         self.HOME = np.array([-0.9, 0.0])
@@ -92,7 +92,7 @@ class RobotTrainer:
         self.total_steps = 0
 
         # Flags
-        self.RESET = True
+        self.RESET = False
         self.eval_flag = True
         
         # Spawn area limits
@@ -119,7 +119,7 @@ class RobotTrainer:
         """Initialize ROS nodes, publishers, and services"""
         try:
             # Initialize ROS node and publishers
-            rospy.init_node('robot_trainer_13', anonymous=True)                                    # Initialize ROS node
+            rospy.init_node('robot_trainer', anonymous=True)                                    # Initialize ROS node
             self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)                 # Initialize velocity publisher
             
             # Initialize odometry subscriber
@@ -151,10 +151,10 @@ class RobotTrainer:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
             # Load model and data
-            if args.load_model != "":
-                policy_file = file_name if args.load_model == "default" else args.load_model
+            #if args.load_model != "":
+                #policy_file = file_name if args.load_model == "default" else args.load_model
 
-                self.load_model(args)   # load the model as a pkl file
+                #self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
                 #self.policy.load(f"./models/{policy_file}"
@@ -294,34 +294,28 @@ class RobotTrainer:
 
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
+        vel_x = linear_vel * np.cos(yaw)
+        vel_y = linear_vel * np.sin(yaw)
         angular_vel = msg.twist.twist.angular.z
         
-        # Distance and angle to goal
-        goal_distance = np.sqrt((self.GOAL[0] - x)**2 + (self.GOAL[1] - y)**2)
-        goal_angle = np.arctan2(self.GOAL[1] - y, self.GOAL[0] - x) - yaw
-        
-        # Normalize angle to [-pi, pi]
-        goal_angle = np.arctan2(np.sin(goal_angle), np.cos(goal_angle))
-        
-        return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
+        return np.array([x, y, yaw, vel_x, vel_y, angular_vel])
     
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
-            #action[0] = (action[0] + 1) / 2 
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0], 0, 1)
+            action[0] = np.clip(action[0], -1, 1)
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
         else:
             # Random action sampling
             action = np.random.normal(0, 1, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0] + 0.5, 0, 1) 
+            action[0] = np.clip(action[0], -1, 1) 
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
 
@@ -410,7 +404,7 @@ class RobotTrainer:
 
         # Save stats
         np.savez(
-            f"./results/stats_{self.file_name}_{self.seed}.npz",
+            f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
             Success_Rate=self.success_list, 
@@ -419,10 +413,10 @@ class RobotTrainer:
             Total_Steps=self.total_steps
         )
         # Save model
-        self.policy.save(f"./models/{self.file_name}")
+        #self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"./replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
+        with open(f"./runs/run_20250317/replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
             pkl.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -478,74 +472,6 @@ class RobotTrainer:
 
         self.cmd_vel_pub.publish(vel_msg)
 
-    def check_boundaries(self, x, y, theta, max_linear_vel):
-        """Check if robot is at boundaries and control its movement."""
-
-        # Define map limits
-        X_MIN, X_MAX = -self.WALL_DIST, self.WALL_DIST
-        Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
-        
-        # Small margin to detect boundary approach
-        MARGIN = 0.1
-        
-        # Check if robot is near boundaries
-        at_x_min = x <= X_MIN + MARGIN # Check if robot is at the bottom
-        at_x_max = x >= X_MAX - MARGIN # Check if robot is at the top
-        at_y_min = y <= Y_MIN + MARGIN # Check if robot is at the right
-        at_y_max = y >= Y_MAX - MARGIN # Check if robot is at the left
-        
-        is_at_boundary = at_x_min or at_x_max or at_y_min or at_y_max
-        
-        if not is_at_boundary:
-            return max_linear_vel, False
-        
-        '''# Calculate if the robot is pointing inward
-        if at_y_min: # Right boundary
-            min = np.arctan2(X_MAX - x, Y_MIN - y)
-            max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_y_max: # Left boundary
-            min = np.arctan2(Y_MAX - y, X_MIN - x)
-            max = 2*np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_min: # Bottom boundary
-            min = np.arctan2(X_MIN - x, Y_MIN - y) - np.pi /2
-            max = np.pi - np.arctan2(Y_MAX - y, X_MIN - x) - np.pi /2
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_max: # Top Boundary
-            min = np.pi/2 - np.arctan2(X_MAX - x, Y_MAX - y)
-            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
-            if theta > min and theta < max: return max_linear_vel, True
-            
-        allowed_linear_vel = 0.0'''
-        
-        # Calculate the direction vector pointing inward
-        target_x = 0
-        target_y = 0
-        
-        # Calculate angle to center of map
-        angle_to_center = np.arctan2(target_y - y, target_x - x)
-        
-        # Normalize angles to [-pi, pi]
-        theta = np.arctan2(np.sin(theta), np.cos(theta))
-        angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
-                            np.cos(angle_to_center - theta))
-        
-        # Check if robot is pointing inward (within 90 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/2
-        
-        # Calculate allowed linear velocity
-        if pointing_inward:
-            allowed_linear_vel = max_linear_vel
-        else:
-            # Stop linear movement if pointing outward
-            allowed_linear_vel = 0.0
-        
-        return allowed_linear_vel, True
-    
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
 
@@ -635,13 +561,13 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            if (self.episode_count % self.EVAL_FREQ) == 0:
+            if (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
                 print("=============================================")
                 print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")
             else:
                 print("=============================================")
-                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count}")
+                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count} - expl noise: {self.expl_noise:.3f}")
                 print("=============================================")
 
             return
@@ -653,15 +579,10 @@ class RobotTrainer:
         # S,A,R,S',done
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
-
-        # Check boundaries and get allowed velocity
-        #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
         
-        temp_action = action
-
-        #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+        temp_action = [(action[0] + 1 ) / 2, action[1]]
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -674,7 +595,7 @@ class RobotTrainer:
             ##rospy.sleep(self.SAMPLE_FREQ)                 # Delay for simulating real-time operation 10 Hz
 
         # Add experience to replay buffer
-        if self.old_state is not None:
+        if self.old_state is not None and self.episode_count > 1:
             self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
             
         # Train policy
@@ -688,6 +609,9 @@ class RobotTrainer:
         # Reset episode if done
         if done:
 
+            if self.expl_noise > 0.05:
+                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 500)
+
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
@@ -696,7 +620,7 @@ class RobotTrainer:
                 
             self.RESET = True
             print("=============================================")
-            print("EPISODE IS DONE - COMING HOME.")
+            print(f"EPISODE IS DONE - Reward: {self.current_episode_reward:.2f} - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             r = np.sqrt(np.random.uniform(0,1))*0.1
@@ -711,14 +635,12 @@ class RobotTrainer:
         self.trajectory.append(next_state[:3])
 
         np.savez(
-                f"./trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
+                f"./runs/run_20250317/trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
                 Trajectory=self.trajectory)
             
         action = self.policy.select_action(next_state)                  # Select action
-
-        #action[0] = (action[0] + 1) / 2 
         
-        temp_action = action
+        temp_action = [(action[0] + 1 ) / 2, action[1]]
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -780,7 +702,7 @@ class RobotTrainer:
                 self.eval_flag = False
 
                 np.savez(
-                f"./results/eval_{self.file_name}_{self.seed}.npz",
+                f"./runs/run_20250317/results/eval_{self.file_name}_{self.seed}.npz",
                 Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
@@ -792,11 +714,15 @@ class RobotTrainer:
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
 
+                # Save model
+                self.policy.save(f"./runs/run_20250317/models/{self.count_eval}_{self.file_name}")
+
     def callback(self, msg):
         """Callback method"""
-        #elapsed_time = rospy.get_time() - self.initial_time
+        elapsed_time = rospy.get_time() - self.initial_time
 
-        if  (self.episode_count) >= 101:
+        #if  (self.episode_count) >= 101:
+        if  (elapsed_time // 3600) >= 6:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
@@ -804,7 +730,7 @@ class RobotTrainer:
         
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
-        elif (self.episode_count % self.EVAL_FREQ) == 0:
+        elif (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
             self.evaluation(msg)
         else:
             self.training_loop(msg)    # The robot is running in the environment
@@ -838,7 +764,7 @@ def init():
     parser.add_argument("--noise_clip", default=0.5)                            # Range to clip target policy noise
     parser.add_argument("--policy_freq", default=2, type=int)                   # Frequency of delayed policy updates
     parser.add_argument("--save_model", action="store_true")                    # Save model and optimizer parameters
-    parser.add_argument("--load_model", default="default")                             # Model load file name, "" doesn't load, "default" uses file_name
+    parser.add_argument("--load_model", default="")                             # Model load file name, "" doesn't load, "default" uses file_name
     parser.add_argument("--name", default=None)                                 # Name for logging
     parser.add_argument("--n_q", default=2, type=int)                           # Number of Q functions
     parser.add_argument("--bootstrap", default=None, type=float)                # Percentage to keep for bootstrap for Q functions
@@ -853,7 +779,7 @@ def init():
     args = parser.parse_args()
 
     #file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
-    file_name = f"ExpD3_{args.hidden_size}_{args.batch_size}_2"
+    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -896,7 +822,7 @@ def init():
     }
     
     # Create data folders
-    if not os.path.exists("./results"):
+    '''if not os.path.exists("./results"):
         os.makedirs("./results")
 
     if not os.path.exists("./models"):
@@ -909,7 +835,12 @@ def init():
         os.makedirs("./replay_buffers")
     
     if not os.path.exists("./trajectories"):
-        os.makedirs("./trajectories")
+        os.makedirs("./trajectories")'''
+
+    os.makedirs("./runs/run_20250317/results", exist_ok=True)
+    os.makedirs("./runs/run_20250317/models", exist_ok=True)
+    os.makedirs("./runs/run_20250317/replay_buffers", exist_ok=True)
+    os.makedirs("./runs/run_20250317/trajectories", exist_ok=True)
 
         
     
