@@ -54,7 +54,7 @@ def come_home(env, home):
         yaw = state[2]
         angle = np.arctan2(home[1] - position[1], home[0] - position[0])
         angular_speed = min(2.0 * (angle - yaw), 2.0)
-        env.publish([0, angular_speed])
+        env.publish_action([0, angular_speed])
     
     distance = np.linalg.norm(position - home)
 
