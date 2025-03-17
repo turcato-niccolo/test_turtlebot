@@ -92,7 +92,7 @@ class RobotTrainer:
         self.total_steps = 0
 
         # Flags
-        self.RESET = True
+        self.RESET = False
         self.eval_flag = True
         
         # Spawn area limits
@@ -151,10 +151,10 @@ class RobotTrainer:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
             # Load model and data
-            if args.load_model != "":
-                policy_file = file_name if args.load_model == "default" else args.load_model
+            #if args.load_model != "":
+                #policy_file = file_name if args.load_model == "default" else args.load_model
 
-                self.load_model(args)   # load the model as a pkl file
+                #self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
                 #self.policy.load(f"./models/{policy_file}"
