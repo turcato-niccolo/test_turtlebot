@@ -44,7 +44,7 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
+        self.GOAL_DIST = 0.5
         self.OBST_W = 0.5
         self.OBST_D = 0.2
         self.HOME = np.array([-0.9, 0.0])
@@ -470,74 +470,6 @@ class RobotTrainer:
 
         self.cmd_vel_pub.publish(vel_msg)
 
-    def check_boundaries(self, x, y, theta, max_linear_vel):
-        """Check if robot is at boundaries and control its movement."""
-
-        # Define map limits
-        X_MIN, X_MAX = -self.WALL_DIST, self.WALL_DIST
-        Y_MIN, Y_MAX = -self.WALL_DIST, self.WALL_DIST
-        
-        # Small margin to detect boundary approach
-        MARGIN = 0.1
-        
-        # Check if robot is near boundaries
-        at_x_min = x <= X_MIN + MARGIN # Check if robot is at the bottom
-        at_x_max = x >= X_MAX - MARGIN # Check if robot is at the top
-        at_y_min = y <= Y_MIN + MARGIN # Check if robot is at the right
-        at_y_max = y >= Y_MAX - MARGIN # Check if robot is at the left
-        
-        is_at_boundary = at_x_min or at_x_max or at_y_min or at_y_max
-        
-        if not is_at_boundary:
-            return max_linear_vel, False
-        
-        '''# Calculate if the robot is pointing inward
-        if at_y_min: # Right boundary
-            min = np.arctan2(X_MAX - x, Y_MIN - y)
-            max = np.pi - np.arctan2(X_MIN - x, Y_MIN - y)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_y_max: # Left boundary
-            min = np.arctan2(Y_MAX - y, X_MIN - x)
-            max = 2*np.pi - np.arctan2(Y_MAX - y, X_MAX - x)
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_min: # Bottom boundary
-            min = np.arctan2(X_MIN - x, Y_MIN - y) - np.pi /2
-            max = np.pi - np.arctan2(Y_MAX - y, X_MIN - x) - np.pi /2
-            if theta > min and theta < max: return max_linear_vel, True
-
-        if at_x_max: # Top Boundary
-            min = np.pi/2 - np.arctan2(X_MAX - x, Y_MAX - y)
-            max = np.pi - np.arctan2(X_MAX - x, Y_MAX - y)
-            if theta > min and theta < max: return max_linear_vel, True
-            
-        allowed_linear_vel = 0.0'''
-        
-        # Calculate the direction vector pointing inward
-        target_x = 0
-        target_y = 0
-        
-        # Calculate angle to center of map
-        angle_to_center = np.arctan2(target_y - y, target_x - x)
-        
-        # Normalize angles to [-pi, pi]
-        theta = np.arctan2(np.sin(theta), np.cos(theta))
-        angle_diff = np.arctan2(np.sin(angle_to_center - theta), 
-                            np.cos(angle_to_center - theta))
-        
-        # Check if robot is pointing inward (within 90 degrees of center direction)
-        pointing_inward = abs(angle_diff) < np.pi/2
-        
-        # Calculate allowed linear velocity
-        if pointing_inward:
-            allowed_linear_vel = max_linear_vel
-        else:
-            # Stop linear movement if pointing outward
-            allowed_linear_vel = 0.0
-        
-        return allowed_linear_vel, True
-    
     def come_back_home(self, msg):
         """Navigate the robot back to the home position and then reorient towards the goal."""
 
