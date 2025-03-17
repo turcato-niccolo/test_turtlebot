@@ -47,7 +47,7 @@ class GazeboEnv:
         self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)
         
         # Initialize odometry subscriber
-        rospy.Subscriber('/vicon/turtlebot_14', Subject, self.callback, queue_size=1)
+        rospy.Subscriber('/vicon/turtlebot_14', Vector3, self.callback, queue_size=1)
 
         self.reset_simulation()
         print("ENV INIT...")
