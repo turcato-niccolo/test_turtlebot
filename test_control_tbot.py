@@ -308,18 +308,17 @@ class RobotTrainer:
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
             action = self.policy.select_action(np.array(state))
-            #action[0] = (action[0] + 1) / 2 
             # Add random noise for exploration
             action += np.random.normal(0, self.expl_noise, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0], 0, 1)
+            action[0] = np.clip(action[0], -1, 1)
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
         else:
             # Random action sampling
             action = np.random.normal(0, 1, size=self.ACTION_DIM)
             # Clip the linear velocity to be between 0 and 1
-            action[0] = np.clip(action[0] + 0.5, 0, 1) 
+            action[0] = np.clip(action[0], -1, 1) 
             # Clip the angular velocity to be between -1 and 1
             action[1] = np.clip(action[1], -1, 1)
 
@@ -408,7 +407,7 @@ class RobotTrainer:
 
         # Save stats
         np.savez(
-            f"./results/stats_{self.file_name}_{self.seed}.npz",
+            f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
             Success_Rate=self.success_list, 
@@ -417,10 +416,10 @@ class RobotTrainer:
             Total_Steps=self.total_steps
         )
         # Save model
-        self.policy.save(f"./models/{self.file_name}")
+        #self.policy.save(f"./models/{self.file_name}")
 
         # Save buffer
-        with open(f"./replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
+        with open(f"./runs/run_20250317/replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'wb') as f:
             pkl.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -639,7 +638,7 @@ class RobotTrainer:
                 print("=============================================")
             else:
                 print("=============================================")
-                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count}")
+                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count} - expl noise: {self.expl_noise}")
                 print("=============================================")
 
             return
@@ -651,15 +650,10 @@ class RobotTrainer:
         # S,A,R,S',done
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
-
-        # Check boundaries and get allowed velocity
-        #allowed_vel, is_outside = self.check_boundaries(next_state[0], next_state[1], next_state[2], max_linear_vel=self.MAX_VEL[0])
             
         action = self.select_action(next_state)                 # Select action
         
-        temp_action = action
-
-        #if is_outside: temp_action[0] = min(action[0], allowed_vel) # If is outside set lin vel to zero
+        temp_action = [(action[0] + 1 ) / 2, action[1]]
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -686,6 +680,9 @@ class RobotTrainer:
         # Reset episode if done
         if done:
 
+            if self.expl_noise > 0.05:
+                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 1e2)
+
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
@@ -694,7 +691,7 @@ class RobotTrainer:
                 
             self.RESET = True
             print("=============================================")
-            print("EPISODE IS DONE - COMING HOME.")
+            print("fEPISODE IS DONE - Reward: {self.current_episode_reward} - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             r = np.sqrt(np.random.uniform(0,1))*0.1
@@ -709,14 +706,12 @@ class RobotTrainer:
         self.trajectory.append(next_state[:3])
 
         np.savez(
-                f"./trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
+                f"./runs/run_20250317/trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
                 Trajectory=self.trajectory)
             
         action = self.policy.select_action(next_state)                  # Select action
-
-        #action[0] = (action[0] + 1) / 2 
         
-        temp_action = action
+        temp_action = [(action[0] + 1 ) / 2, action[1]]
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -778,7 +773,7 @@ class RobotTrainer:
                 self.eval_flag = False
 
                 np.savez(
-                f"./results/eval_{self.file_name}_{self.seed}.npz",
+                f"./runs/run_20250317/results/eval_{self.file_name}_{self.seed}.npz",
                 Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
@@ -790,11 +785,15 @@ class RobotTrainer:
                 print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
                 print("=============================================")
 
+                # Save model
+                self.policy.save(f"./runs/run_20250317/models/{self.count_eval}_{self.file_name}")
+
     def callback(self, msg):
         """Callback method"""
-        #elapsed_time = rospy.get_time() - self.initial_time
+        elapsed_time = rospy.get_time() - self.initial_time
 
-        if  (self.episode_count) >= 101:
+        #if  (self.episode_count) >= 101:
+        if  (elapsed_time // 3600) >= 3:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
@@ -836,7 +835,7 @@ def init():
     parser.add_argument("--noise_clip", default=0.5)                            # Range to clip target policy noise
     parser.add_argument("--policy_freq", default=2, type=int)                   # Frequency of delayed policy updates
     parser.add_argument("--save_model", action="store_true")                    # Save model and optimizer parameters
-    parser.add_argument("--load_model", default="default")                             # Model load file name, "" doesn't load, "default" uses file_name
+    parser.add_argument("--load_model", default="")                             # Model load file name, "" doesn't load, "default" uses file_name
     parser.add_argument("--name", default=None)                                 # Name for logging
     parser.add_argument("--n_q", default=2, type=int)                           # Number of Q functions
     parser.add_argument("--bootstrap", default=None, type=float)                # Percentage to keep for bootstrap for Q functions
@@ -851,7 +850,7 @@ def init():
     args = parser.parse_args()
 
     #file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
-    file_name = f"ExpD3_{args.hidden_size}_{args.batch_size}_2"
+    file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -908,6 +907,11 @@ def init():
     
     if not os.path.exists("./trajectories"):
         os.makedirs("./trajectories")
+
+    os.makedirs("./runs/run_20250317/results", exist_ok=True)
+    os.makedirs("./runs/run_20250317/models", exist_ok=True)
+    os.makedirs("./runs/run_20250317/replay_buffers", exist_ok=True)
+    os.makedirs("./runs/run_20250317/trajectories", exist_ok=True)
 
         
     
