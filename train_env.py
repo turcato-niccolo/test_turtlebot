@@ -68,7 +68,7 @@ def come_home(env, home):
         # Proportional controller with increased speed
         linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
         angular_speed = min(2.0 * (angle - yaw), 2.0)  # Increased max angular speed
-        env.publish([linear_speed, angular_speed])
+        env.publish_action([linear_speed, angular_speed])
 
 def evaluate(env, policy, eval_episodes=10):
     avrg_reward = 0.0
