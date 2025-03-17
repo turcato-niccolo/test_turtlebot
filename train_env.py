@@ -39,7 +39,7 @@ def choose_policy(args, kwargs):
 def come_home(env, home):
     print("COMING HOME")
     state = env.get_state()
-    while state is not None:
+    while state is None:
         state = env.get_state()
         
     position = state[:2]
