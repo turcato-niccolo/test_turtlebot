@@ -37,17 +37,13 @@ class GazeboEnv:
     def _initialize_ros(self):
         """Initialize ROS nodes, publishers, and services"""
 
-                         # Initialize velocity publisher
-            
-            # Initialize odometry subscriber
-            
-        
         # Initialize ROS node and publishers
-        rospy.init_node('environment', anonymous=True)                                      # Initialize ROS node
-        self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)
+        rospy.init_node('robot_trainer', anonymous=True)                                
+        self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)            # Initialize velocity publisher
         
         # Initialize odometry subscriber
-        rospy.Subscriber('/vicon/turtlebot_14', Vector3, self.callback, queue_size=1)
+        rospy.Subscriber('/turtlebot_14/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
+        rospy.loginfo("ROS initialization completed")  
 
         print("ENV INIT...")
 
