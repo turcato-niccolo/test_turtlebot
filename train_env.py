@@ -43,20 +43,9 @@ def come_home(env, home):
         state = env.get_state()
         
     position = state[:2]
-    yaw = state[2]
-    
-    angle = np.arctan2(home[1] - position[1], home[0] - position[0])
-
-    while (angle - yaw) > 0.05:
-
-        state = env.get_state()
-        position = state[:2]
-        yaw = state[2]
-        angle = np.arctan2(home[1] - position[1], home[0] - position[0])
-        angular_speed = min(2.0 * (angle - yaw), 2.0)
-        env.publish_action([0, angular_speed])
-    
     distance = np.linalg.norm(position - home)
+    Kv = 0.5
+    Kw = 1
 
     while distance > 0.1:
 
@@ -65,10 +54,8 @@ def come_home(env, home):
         yaw = state[2]
         angle = np.arctan2(home[1] - position[1], home[0] - position[0])
         distance = np.linalg.norm(position - home)
-        # Proportional controller with increased speed
-        linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
-        angular_speed = min(2.0 * (angle - yaw), 2.0)  # Increased max angular speed
-        env.publish_action([linear_speed, angular_speed])
+
+        env.publish_action([Kv*distance, Kw*(angle-yaw)])
 
 def evaluate(env, policy, eval_episodes=10):
     avrg_reward = 0.0
