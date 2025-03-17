@@ -4,7 +4,7 @@ import time
 
 from geometry_msgs.msg import Twist, Pose, Vector3
 from std_srvs.srv import Empty
-from vicon.msg import Subject
+from nav_msgs import Odometry
 
 class GazeboEnv:
 
