@@ -292,16 +292,11 @@ class RobotTrainer:
 
         # Robot velocities
         linear_vel = msg.twist.twist.linear.x
+        vel_x = linear_vel * np.cos(yaw)
+        vel_y = linear_vel * np.sin(yaw)
         angular_vel = msg.twist.twist.angular.z
         
-        # Distance and angle to goal
-        goal_distance = np.sqrt((self.GOAL[0] - x)**2 + (self.GOAL[1] - y)**2)
-        goal_angle = np.arctan2(self.GOAL[1] - y, self.GOAL[0] - x) - yaw
-        
-        # Normalize angle to [-pi, pi]
-        goal_angle = np.arctan2(np.sin(goal_angle), np.cos(goal_angle))
-        
-        return np.array([x, y, yaw, linear_vel, angular_vel, goal_angle])
+        return np.array([x, y, yaw, vel_x, vel_y, angular_vel])
     
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
@@ -632,13 +627,13 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            if (self.episode_count % self.EVAL_FREQ) == 0:
+            if (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
                 print("=============================================")
                 print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")
             else:
                 print("=============================================")
-                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count} - expl noise: {self.expl_noise}")
+                print(f"HOME REACHED - STARTING THE EPISODE {self.episode_count} - expl noise: {self.expl_noise:.3f}")
                 print("=============================================")
 
             return
@@ -681,7 +676,7 @@ class RobotTrainer:
         if done:
 
             if self.expl_noise > 0.05:
-                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 1e2)
+                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 1e3)
 
             if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
                 self.evaluation_success_list.append(1)
@@ -691,7 +686,7 @@ class RobotTrainer:
                 
             self.RESET = True
             print("=============================================")
-            print(f"EPISODE IS DONE - Reward: {self.current_episode_reward} - COMING HOME.")
+            print(f"EPISODE IS DONE - Reward: {self.current_episode_reward:.2f} - COMING HOME.")
             print("=============================================")
             self.publish_velocity([0.0, 0.0])
             r = np.sqrt(np.random.uniform(0,1))*0.1
