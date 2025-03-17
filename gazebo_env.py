@@ -67,6 +67,8 @@ class GazeboEnv:
         cosy_cosp = 1 - 2 * (y*y + z*z)
         yaw = np.arctan2(siny_cosp, cosy_cosp)
 
+        yaw -= np.pi / 2
+
         # Homogeneous tranformation
         H = np.array([[0, 1, 0],
                      [-1, 0, -1],
