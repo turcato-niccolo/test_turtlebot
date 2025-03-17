@@ -68,9 +68,9 @@ class GazeboEnv:
         yaw = np.arctan2(siny_cosp, cosy_cosp)
 
         # Homogeneous tranformation
-        H = np.array([0, 1, 0],
+        H = np.array([[0, 1, 0],
                      [-1, 0, -1],
-                     [0, 0, 1])
+                     [0, 0, 1]])
         vec_hom = np.append([x, y], 1)
         trans_vec = H @ vec_hom
         x, y = trans_vec[0], trans_vec[1]
