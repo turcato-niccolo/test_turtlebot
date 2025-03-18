@@ -44,6 +44,7 @@ class RobotTrainer:
         self.expl_noise = args.expl_noise
 
         self.file_name = file_name
+        self.policy_name = args.policy
         
         # Environment parameters
         self.GOAL = np.array([1.0, 0.0])
@@ -319,7 +320,7 @@ class RobotTrainer:
 
         # Save stats
         np.savez(
-            f"./results/stats_{self.file_name}.npz",
+            f"./runs/{self.policy_name}/results/stats_{self.file_name}.npz",
             Total_Episodes=self.episodes, 
             Total_Reward=self.rewards, 
             Success_Rate=self.success_list, 
@@ -329,7 +330,7 @@ class RobotTrainer:
         )
 
         # Save buffer
-        with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'wb') as f:
+        with open(f"./runs/{self.policy_name}/replay_buffers/replay_buffer_{self.file_name}.pkl", 'wb') as f:
             pickle.dump(self.replay_buffer, f)
 
     def reset(self):
@@ -415,9 +416,11 @@ class RobotTrainer:
     def evaluation(self, msg):
         done = self.check_timeout()
         next_state = self.get_state_from_odom(msg)
-            
-        #action = self.policy.select_action(next_state, evaluate=True)     # Select action
-        action = self.policy.select_action(next_state)     # Select action
+        
+        if self.expl_noise == 0:
+            action = self.policy.select_action(next_state, evaluate=True)       # Select action
+        else:
+            action = self.policy.select_action(next_state)                      # Select action
 
         reward, terminated = self.compute_reward(self.old_state, next_state)
 
@@ -467,7 +470,7 @@ class RobotTrainer:
                 self.average_reward_list.append(avrg_reward)
 
                 np.savez(
-                f"./results/eval_{self.file_name}.npz",
+                f"./runs/{self.policy_name}/results/eval_{self.file_name}.npz",
                 Evaluation_Reward_List=self.average_reward_list,
                 Evaluation_Success_List=self.average_success_list,
                 Total_Time_List=self.time_list)
@@ -480,7 +483,7 @@ class RobotTrainer:
                 print("=============================================")
 
                 # Save model
-                self.policy.save(f"./models/{self.count_eval}_{self.file_name}")
+                self.policy.save(f"./runs/{self.policy_name}/models/{self.count_eval}_{self.file_name}")
     
     def callback(self, msg):
         """Callback method"""
@@ -588,15 +591,9 @@ def init():
             "rect_action_flag": False
         }
 
-    # Create data folders
-    if not os.path.exists("./results"):
-        os.makedirs("./results")
-
-    if not os.path.exists("./models"):
-        os.makedirs("./models")
-
-    if not os.path.exists("./replay_buffers"):
-        os.makedirs("./replay_buffers")
+    os.makedirs(f"./runs/{args.policy}/results", exist_ok=True)
+    os.makedirs(f"./runs/{args.policy}/models", exist_ok=True)
+    os.makedirs(f"./runs/{args.policy}/replay_buffers", exist_ok=True)
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
