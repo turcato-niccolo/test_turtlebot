@@ -145,8 +145,7 @@ class RobotTrainer:
 
             # Load model and data
             if args.load_model != "":
-                policy_file = file_name if args.load_model == "default" else args.load_model
-
+                #policy_file = file_name if args.load_model == "default" else args.load_model
                 #self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net

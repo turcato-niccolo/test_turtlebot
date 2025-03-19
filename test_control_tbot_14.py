@@ -494,7 +494,6 @@ class RobotTrainer:
             if abs(angle_error) > 0.2:  # A threshold to avoid small corrections
                 angular_velocity = 3 * np.sign(angle_error)  # Rotate towards home
                 linear_velocity = 0.5  # Stop moving forward while correcting orientation
-                #rospy.loginfo(f"Rotating to face home. Angle error: {angle_error:.2f}")
             else:
                 # Once aligned, move towards the home position
                 direction = home_position - current_position
@@ -505,8 +504,6 @@ class RobotTrainer:
 
                 # Set angular velocity to 0, since we're aligned with the target
                 angular_velocity = 0.0
-
-                #rospy.loginfo(f"Moving towards home. Distance to home: {distance_to_home:.2f} meters.")
 
             # Publish velocity commands to move the robot
             self.publish_velocity([linear_velocity, angular_velocity])
@@ -544,13 +541,11 @@ class RobotTrainer:
         if abs(angle_error) > 0.1:  # A threshold for alignment
             angular_velocity = 3 * np.sign(angle_error)  # Rotate towards goal
             linear_velocity = 0.0  # Stop moving forward while rotating
-            #rospy.loginfo(f"Rotating to face goal. Angle error: {angle_error:.2f}")
         else:
             angular_velocity = 0.0  # Already facing the goal
             linear_velocity = 0.0  # No movement since we only care about orientation
             self.RESET = False
             self.start_time = rospy.get_time()
-            self.publish_velocity([linear_velocity, angular_velocity])
 
             if (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
                 print("=============================================")
