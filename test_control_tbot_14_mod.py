@@ -44,10 +44,10 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.5
+        self.GOAL_DIST = 0.2
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-0.9, 0.0])
+        self.HOME = np.array([-1, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -94,13 +94,8 @@ class RobotTrainer:
         # Flags
         self.RESET = False
         self.eval_flag = True
-        
-        # Spawn area limits
-        self.SPAWN_LIMITS = {
-            'x': (-0.95, -0.75),  
-            'y': (-0.15, 0.15),
-            'yaw': (-np.pi/4, np.pi/4)
-        }
+
+        self.x, self.y = 0, 0
         
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
@@ -277,6 +272,8 @@ class RobotTrainer:
         # Robot position
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
+
+        self.x, self.y = x, y
         
         # Get orientation
         quaternion = (
@@ -296,60 +293,63 @@ class RobotTrainer:
         vel_y = linear_vel * np.sin(yaw)
         angular_vel = msg.twist.twist.angular.z
         
-        return np.array([x, y, yaw, vel_x, vel_y, angular_vel])
+        # Compute distance to goal
+        dx = self.GOAL[0] - x
+        dy = self.GOAL[1] - y
+        distance = np.linalg.norm([dx, dy])
+        
+        # Compute the angle from the robot to the goal
+        goal_angle = np.arctan2(dy, dx)
+        
+        # Compute the relative heading error (normalize to [-pi, pi])
+        e_theta_g = (yaw - goal_angle + np.pi) % (2 * np.pi) - np.pi
+        
+        # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
+        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle)
+        
+        # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
+        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle)
 
-    def compute_reward(self, state, next_state):
-        """Reward computation"""
+        # Compute distance to obstacle (assuming obstacle is at the origin)
+        d_obs = np.linalg.norm([x, y])
+        
+        # Create the processed state vector
+        state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
+        return state
 
-        p = np.array(next_state[:2])
-        dist_to_goal = np.linalg.norm(p - self.GOAL)
+    def compute_reward(self, state):
+        # Unpack the state components
+        distance = state[0]
+        e_theta_g = state[1]
+        v_perp = state[3]
+        angular_vel = state[4]
+        d_obs = state[5]
         
-        # Initialize reward and termination flag
-        reward = 0
-        terminated = False
+        goal_threshold = 0.2  # Distance below which the goal is considered reached (meters)
+        goal_reward = 100.0   # Reward bonus for reaching the goal
         
-        # Distance-based reward components
-        reward -= self.DISTANCE_PENALTY * dist_to_goal ** 2
-        reward += self.GAUSSIAN_REWARD_SCALE * np.exp(-dist_to_goal**2)
+        # New penalty constants for abnormal events:
+        boundary_penalty = -50.0   # Penalty for leaving the allowed area
+        collision_penalty = -100.0 # Penalty for colliding with the obstacle
         
-        if state is not None:
-            prev = np.array(state[:2])
-            # Calculate prev distance
-            prev_dist_to_goal = np.linalg.norm(prev - self.GOAL)
-
-            # Movement reward/penalty
-            if dist_to_goal >= prev_dist_to_goal:
-                reward -= self.MOVEMENT_PENALTY
-            else:
-                reward += self.MOVEMENT_PENALTY
+        # Check if the goal is reached
+        if distance < goal_threshold:
+            print("WIN")
+            return goal_reward, True
         
-        bound_x = self.WALL_DIST + 0.2
-        bound_y = bound_x
-
-        # Check boundary
-        if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
-            terminated = True
-            #print("WALL")
-
-        # Check collision with obstacle
-        if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
-            reward -= self.OBSTACLE_PENALTY
-            terminated = True
-            self.collision_count += 1
-            self.success = 0
-            self.collision = 1
-            #print("OBSTACLE")
-            
+        # Check boundary violation:
+        if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
+            print("DANGER ZONE")
+            return boundary_penalty, True
         
-        # Check goal achievement
-        if dist_to_goal <= self.GOAL_DIST:
-            reward += self.GOAL_REWARD
-            terminated = True
-            self.success_count += 1
-            self.success = 1
-            self.collision = 0
+        # Check collision with obstacle:
+        if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
+            print("COLLISION")
+            return collision_penalty, True
         
-        return reward, terminated
+        reward = d_obs - 2 * distance
+        
+        return reward, False
 
     def select_action(self, state):
         """Select action based on current policy or random sampling"""
@@ -607,10 +607,10 @@ class RobotTrainer:
         # Reset episode if done
         if done:
 
-            if self.expl_noise > 0.05:
-                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 500)
+            if self.expl_noise > 0.1:
+                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.2:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
                 print("WIN")

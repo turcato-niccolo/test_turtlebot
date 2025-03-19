@@ -841,8 +841,6 @@ def init():
     os.makedirs("./runs/run_20250317/models", exist_ok=True)
     os.makedirs("./runs/run_20250317/replay_buffers", exist_ok=True)
     os.makedirs("./runs/run_20250317/trajectories", exist_ok=True)
-
-        
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
