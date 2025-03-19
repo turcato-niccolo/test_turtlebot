@@ -95,7 +95,7 @@ class RobotTrainer:
         self.RESET = False
         self.eval_flag = True
 
-        self.x, self.y = 0, 0
+        self.x, self.y, self.yaw = 0, 0, 0
         
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
@@ -484,11 +484,11 @@ class RobotTrainer:
             return
 
 
-        next_state = self.get_state_from_odom(msg)                              # Get the current state from the odometry message
+        next_state = [self.x, self.y]                              # Get the current state from the odometry message
         current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
         home_position = np.array(self.HOME)
         distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
-        current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
+        current_yaw = self.yaw                                             # Get the robot's current yaw angle (orientation)
         direction = home_position - current_position                            # Calculate Direction
         desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
         angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
