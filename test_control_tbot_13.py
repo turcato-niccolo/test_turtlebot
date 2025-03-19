@@ -95,13 +95,6 @@ class RobotTrainer:
         self.RESET = False
         self.eval_flag = True
         
-        # Spawn area limits
-        self.SPAWN_LIMITS = {
-            'x': (-0.95, -0.75),  
-            'y': (-0.15, 0.15),
-            'yaw': (-np.pi/4, np.pi/4)
-        }
-        
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
 
@@ -151,31 +144,31 @@ class RobotTrainer:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
             # Load model and data
-            #if args.load_model != "":
-                #policy_file = file_name if args.load_model == "default" else args.load_model
+            if args.load_model != "":
+                policy_file = file_name if args.load_model == "default" else args.load_model
 
                 #self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
-                #self.policy.load(f"./models/{policy_file}"
+                self.policy.load(f"./runs/run_20250317/models/{self.count_eval}_{self.file_name}")
                 #self.save_model()   # save the model as a pkl file
 
                 # Load the previous Statistics
-                '''loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
+                loaded_data = np.load(f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz")
                 self.episodes = loaded_data['Total_Episodes'].tolist()
                 self.rewards = loaded_data['Total_Reward'].tolist()
                 self.success_list = loaded_data['Success_Rate'].tolist()
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                #self.evaluation_reward_list = np.load("./results/eval_ExpD3_64_128_1.npz")['Evaluation_Reward_List'].tolist()
+                self.evaluation_reward_list = np.load("./runs/run_20250317/results/eval_{self.file_name}_{self.seed}.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
-                self.total_training_time = self.training_time[-1]'''
+                self.total_training_time = self.training_time[-1]
 
                 # Load replay buffer
-                '''with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'rb') as f:
-                    self.replay_buffer = pkl.load(f)'''
+                with open(f"./runs/run_20250317/replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'rb') as f:
+                    self.replay_buffer = pkl.load(f)
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
@@ -612,7 +605,7 @@ class RobotTrainer:
             if self.expl_noise > 0.05:
                 self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 300)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
                 print("WIN")
@@ -635,7 +628,7 @@ class RobotTrainer:
         self.trajectory.append(next_state[:3])
 
         np.savez(
-                f"./runs/run_20250317/trajectories/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
+                f"./runs/run_20250317/trajectories/{self.seed}/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
                 Trajectory=self.trajectory)
             
         action = self.policy.select_action(next_state)                  # Select action
@@ -666,7 +659,7 @@ class RobotTrainer:
 
             self.evaluation_reward_list.append(self.evaluation_reward)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
                 print("WIN")
@@ -722,7 +715,7 @@ class RobotTrainer:
         elapsed_time = rospy.get_time() - self.initial_time
 
         #if  (self.episode_count) >= 101:
-        if  (elapsed_time // 3600) >= 6:
+        if  (elapsed_time // 3600) >= 3:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
@@ -735,7 +728,7 @@ class RobotTrainer:
         else:
             self.training_loop(msg)    # The robot is running in the environment
 
-    '''def callback(self, msg):
+    '''def callback_evaluation(self, msg):
 
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
@@ -820,27 +813,11 @@ def init():
         "rect_action_flag": False,
         "lr": args.lr
     }
-    
-    # Create data folders
-    '''if not os.path.exists("./results"):
-        os.makedirs("./results")
-
-    if not os.path.exists("./models"):
-        os.makedirs("./models")
-
-    if not os.path.exists("./images"):
-        os.makedirs("./images")
-
-    if not os.path.exists("./replay_buffers"):
-        os.makedirs("./replay_buffers")
-    
-    if not os.path.exists("./trajectories"):
-        os.makedirs("./trajectories")'''
 
     os.makedirs("./runs/run_20250317/results", exist_ok=True)
     os.makedirs("./runs/run_20250317/models", exist_ok=True)
     os.makedirs("./runs/run_20250317/replay_buffers", exist_ok=True)
-    os.makedirs("./runs/run_20250317/trajectories", exist_ok=True)
+    os.makedirs(f"./runs/run_20250317/trajectories/{args.seed}", exist_ok=True)
     
     print("=============================================================================================")
     print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
