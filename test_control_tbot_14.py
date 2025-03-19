@@ -144,31 +144,31 @@ class RobotTrainer:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
             # Load model and data
-            #if args.load_model != "":
+            if args.load_model != "":
                 #policy_file = file_name if args.load_model == "default" else args.load_model
 
                 #self.load_model(args)   # load the model as a pkl file
 
                 # Load the Parameters of the Neural Net
-                #self.policy.load(f"./models/{policy_file}"
+                self.policy.load(f"./runs/run_20250317/models/{self.count_eval}_{self.file_name}")
                 #self.save_model()   # save the model as a pkl file
 
                 # Load the previous Statistics
-                '''loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
+                loaded_data = np.load(f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz")
                 self.episodes = loaded_data['Total_Episodes'].tolist()
                 self.rewards = loaded_data['Total_Reward'].tolist()
                 self.success_list = loaded_data['Success_Rate'].tolist()
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                #self.evaluation_reward_list = np.load("./results/eval_ExpD3_64_128_1.npz")['Evaluation_Reward_List'].tolist()
+                self.evaluation_reward_list = np.load("./runs/run_20250317/results/eval_{self.file_name}_{self.seed}.npz")['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
-                self.total_training_time = self.training_time[-1]'''
+                self.total_training_time = self.training_time[-1]
 
                 # Load replay buffer
-                '''with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'rb') as f:
-                    self.replay_buffer = pkl.load(f)'''
+                with open(f"./runs/run_20250317/replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'rb') as f:
+                    self.replay_buffer = pkl.load(f)
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
@@ -256,7 +256,7 @@ class RobotTrainer:
 
     def homogeneous_transfomration(self, vector):
         H = np.array([[0, 1, 0],
-                      [-1, 0, -1],
+                      [-1, 0, -1.2],
                       [0, 0, 1]])
 
 
