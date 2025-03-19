@@ -44,7 +44,7 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.2
+        self.GOAL_DIST = 0.5
         self.OBST_W = 0.5
         self.OBST_D = 0.2
         self.HOME = np.array([-1, 0.0])
@@ -95,7 +95,7 @@ class RobotTrainer:
         self.RESET = False
         self.eval_flag = True
 
-        self.x, self.y, self.yaw = 0, 0, 0
+        self.x, self.y = 0, 0
         
         # Initialize ROS and RL components
         self._initialize_system(args, kwargs, action_space, file_name)
@@ -267,7 +267,7 @@ class RobotTrainer:
 
         return transformed_vec[0], transformed_vec[1]
 
-    def get_state_from_odom(self, msg):
+    def get_state_from_odom(self, msg, odom=False):
         """Extract state information from odometry message"""
         # Robot position
         x = msg.pose.pose.position.x
@@ -293,6 +293,10 @@ class RobotTrainer:
         vel_y = linear_vel * np.sin(yaw)
         angular_vel = msg.twist.twist.angular.z
         
+        if odom:
+            state = np.array([x, y, yaw, vel_x, vel_y, angular_vel])
+            return state
+        
         # Compute distance to goal
         dx = self.GOAL[0] - x
         dy = self.GOAL[1] - y
@@ -317,23 +321,23 @@ class RobotTrainer:
         state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
         return state
 
-    def compute_reward(self, state):
+    def compute_reward(self, state, next_state):
         # Unpack the state components
-        distance = state[0]
-        e_theta_g = state[1]
+        next_distance = next_state[0]
+        """e_theta_g = state[1]
         v_perp = state[3]
         angular_vel = state[4]
-        d_obs = state[5]
+        d_obs = state[5]"""
         
-        goal_threshold = 0.2  # Distance below which the goal is considered reached (meters)
+        goal_threshold = self.GOAL_DIST  # Distance below which the goal is considered reached (meters)
         goal_reward = 100.0   # Reward bonus for reaching the goal
         
         # New penalty constants for abnormal events:
-        boundary_penalty = -50.0   # Penalty for leaving the allowed area
-        collision_penalty = -100.0 # Penalty for colliding with the obstacle
+        boundary_penalty = -25.0   # Penalty for leaving the allowed area
+        collision_penalty = -50.0 # Penalty for colliding with the obstacle
         
         # Check if the goal is reached
-        if distance < goal_threshold:
+        if next_distance < goal_threshold:
             print("WIN")
             return goal_reward, True
         
@@ -347,7 +351,12 @@ class RobotTrainer:
             print("COLLISION")
             return collision_penalty, True
         
-        reward = d_obs - 2 * distance
+        if state is not None:
+            distance = state[0]
+            delta_d = distance - next_distance
+            reward = 1 if delta_d > 0 else -1
+        else:
+            reward = 0
         
         return reward, False
 
@@ -484,11 +493,11 @@ class RobotTrainer:
             return
 
 
-        next_state = [self.x, self.y]                              # Get the current state from the odometry message
+        next_state = [self.get_state_from_odom(msg, True)]                              # Get the current state from the odometry message
         current_position = np.array(next_state[:2])                             # Current position (x, y) and the home position
         home_position = np.array(self.HOME)
         distance_to_home = np.linalg.norm(current_position - home_position)     # Calculate distance to home
-        current_yaw = self.yaw                                             # Get the robot's current yaw angle (orientation)
+        current_yaw = next_state[2]                                             # Get the robot's current yaw angle (orientation)
         direction = home_position - current_position                            # Calculate Direction
         desired_angle_to_home = np.arctan2(direction[1], direction[0])          # Calculate the desired angle to home
         angle_error = desired_angle_to_home - current_yaw                       # Calculate the angle difference (heading error)
@@ -582,7 +591,7 @@ class RobotTrainer:
         
         temp_action = [(action[0] + 1 ) / 2, action[1]]
 
-        reward, terminated = self.compute_reward(self.old_state, next_state)
+        reward, terminated = self.compute_reward(self, self.old_state, next_state)
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -610,7 +619,7 @@ class RobotTrainer:
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.2:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
                 print("WIN")
@@ -640,7 +649,7 @@ class RobotTrainer:
         
         temp_action = [(action[0] + 1 ) / 2, action[1]]
 
-        reward, terminated = self.compute_reward(self.old_state, next_state)
+        reward, terminated = self.compute_reward(self, self.old_state, next_state)
 
         done = done or terminated                           # Episode termination
         self.evaluation_reward += reward                    # Update episode reward
@@ -664,7 +673,7 @@ class RobotTrainer:
 
             self.evaluation_reward_list.append(self.evaluation_reward)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 self.evaluation_success_list.append(1)
                 print("=============================================")
                 print("WIN")
@@ -719,14 +728,17 @@ class RobotTrainer:
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
-        #if  (self.episode_count) >= 101:
-        if  (elapsed_time // 3600) >= 6:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
-        
-        if self.RESET:
+        #if  (elapsed_time // 3600) >= 6:
+        if  (self.episode_count) > 400:
+            if self.evaluation_count < 5:
+                self.evaluation(msg)
+                self.evaluation_count = 6
+            else:
+                print("EXITING. GOODBYE!")
+                self.publish_velocity([0.0, 0.0])
+                rospy.signal_shutdown("EXITING. GOODBYE!")
+                return
+        elif self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         elif (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
             self.evaluation(msg)
