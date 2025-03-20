@@ -516,7 +516,7 @@ class RobotTrainer:
                 direction /= distance_to_home  # Normalize direction vector
 
                 # Calculate linear velocity (capped by maximum velocity)
-                linear_velocity = min(self.MAX_VEL[0], distance_to_home)  # Cap velocity
+                linear_velocity = min(self.MAX_VEL[0], 2*distance_to_home)  # Cap velocity
 
                 # Set angular velocity to 0, since we're aligned with the target
                 angular_velocity = 0.0
