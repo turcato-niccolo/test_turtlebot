@@ -25,14 +25,14 @@ class RobotTrainer:
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
-        self.MAX_VEL = [0.4, np.pi/4]
+        self.MAX_VEL = [0.5, np.pi/4]
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
         self.SAMPLE_FREQ = 1 / 8
         self.MAX_STEP_EPISODE = 200
         self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
-        self.MAX_TIME = 15
+        self.MAX_TIME = 20
         self.EVAL_FREQ = args.eval_freq
         self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
@@ -44,7 +44,7 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.5
+        self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
         self.HOME = np.array([-0.9, 0.0])
