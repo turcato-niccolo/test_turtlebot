@@ -179,45 +179,62 @@ class RobotTrainer:
         actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
         critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
 
-        '''actor_params = pkl.load(open(f'actor_params.pkl', 'rb')) 
-        critic_params = pkl.load(open(f'critic_params.pkl', 'rb'))'''
-
-        self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
-        self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
-        self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
-        self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
-        self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
-        self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
-
-        self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
-        self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
-        self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
-        self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
-        self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
-        self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
-
         if 'TD3' in args.policy:
-            w4 = critic_params[0]
-            w4 += np.random.randn(*w4.shape) * 0.0001
-            b4 = critic_params[1]
-            b4 += np.random.randn(*b4.shape) * 0.0001
-            w5 = critic_params[2]
-            w5 += np.random.randn(*w5.shape) * 0.0001
-            b5 = critic_params[3]
-            b5 += np.random.randn(*b5.shape) * 0.0001
-            w6 = critic_params[4]
-            w6 += np.random.randn(*w6.shape) * 0.0001
-            b6 = critic_params[5]
-            b6 += np.random.randn(*b6.shape) * 0.0001
-
-            self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(w4, requires_grad=True))
-            self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(b4, requires_grad=True))
-            self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(w5, requires_grad=True))
-            self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(b5, requires_grad=True))
-            self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(w6, requires_grad=True))
-            self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(b6, requires_grad=True))
+            #Actor
+            self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+            self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+            self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+            self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+            self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+            self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+            #Critic
+            self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+            self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+            self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+            self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+            self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+            self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
+            self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
+            self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
+            self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
+            self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
+            self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
+        elif 'ExpD3' in args.policy:
+            #Actor
+            self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+            self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+            self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+            self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+            self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+            self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+            #Critic
+            self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+            self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+            self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+            self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+            self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+            self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+        elif 'DDPG' in args.policy:
+            #Actor
+            self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+            self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+            self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+            self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+            self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+            self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+            #Critic
+            self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+            self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+            self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+            self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+            self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+            self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+        elif 'SAC' in args.policy:
+            pass
+        else:
+            raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
-
         print("LOADED MODEL")
 
     def save_model(self):
@@ -229,9 +246,6 @@ class RobotTrainer:
         
         pkl.dump(p_actor, open(f'actor_params_{self.file_name}.pkl', 'wb'))
         pkl.dump(p_critic, open(f'critic_params_{self.file_name}.pkl', 'wb'))
-
-        '''pkl.dump(p_actor, open(f'actor_params_backup.pkl', 'wb'))
-        pkl.dump(p_critic, open(f'critic_params_backup.pkl', 'wb'))'''
 
         print("SAVED MODEL")
 
@@ -713,8 +727,8 @@ class RobotTrainer:
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
-        #if  (self.episode_count) >= 101:
-        if  (elapsed_time // 3600) >= 3:
+        #if  (elapsed_time // 3600) >= 3:
+        if  (self.episode_count) > 100:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
