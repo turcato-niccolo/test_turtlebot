@@ -640,9 +640,9 @@ class RobotTrainer:
 
         self.trajectory.append(next_state[:3])
 
-        np.savez(
-                f"./runs/run_20250317/trajectories/{self.seed}/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npz",
-                Trajectory=self.trajectory)
+        np.save(
+                f"./runs/run_20250317/trajectories/{self.seed}/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npy",
+                np.array(self.trajectory))
             
         action = self.policy.select_action(next_state)                  # Select action
         
