@@ -1,7 +1,7 @@
 #!/bin/bash
 
 for seed in {0..3}; do
-    python3 test_control_mod.py \
+    python3 model_converter.py \
         --policy TD3 \
         --hidden_size 64 \
         --batch_size 128 \

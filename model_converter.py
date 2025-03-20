@@ -39,95 +39,9 @@ class RobotTrainer:
 
         self.file_name = file_name
         
-        # Environment parameters
-        self.GOAL = np.array([1.0, 0.0])
-        self.OBSTACLE = np.array([0.0, 0.0])
-        self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
-        self.OBST_W = 0.5
-        self.OBST_D = 0.2
-        self.HOME = np.array([-0.9, 0.0])
-        
-        # Reward parameters
-        self.DISTANCE_PENALTY = 0.5
-        self.GOAL_REWARD = 1000
-        self.OBSTACLE_PENALTY = 10
-        self.MOVEMENT_PENALTY = 1
-        self.GAUSSIAN_REWARD_SCALE = 2
-        
-        # Training statistics
-        self.episode_count = 0
-        self.count_eval = 0
-        self.evaluation_count = 0
-        self.total_training_time = 0
-        self.episode_rewards = []
-        self.success_count = 0
-        self.collision_count = 0
-        self.avg_episode_length = []
-        self.success = 0
-        self.collision = 0
-        self.evaluation_reward = 0
-        self.evaluation_reward_list = []
-        self.evaluation_success_list = []
-        self.time_list = []
-        self.average_success_list = []
-        self.average_reward_list = []
-        self.trajectory = []
-
-        # Stats to save
-        self.episodes = []
-        self.rewards = []
-        self.success_list = []
-        self.collisions = []
-        self.training_time = []
-        
-        # State variables
-        self.initial_time = 0
-        self.start_time = None
-        self.old_state = None
-        self.old_action = None
-        self.current_episode_reward = 0
-        self.steps_in_episode = 0
-        self.total_steps = 0
-
-        # Flags
-        self.RESET = False
-        
-        # Spawn area limits
-        self.SPAWN_LIMITS = {
-            'x': (-0.95, -0.75),  
-            'y': (-0.15, 0.15),
-            'yaw': (-np.pi/4, np.pi/4)
-        }
-        
-        # Initialize ROS and RL components
-        self._initialize_system(args, kwargs, action_space, file_name)
-
-    def _initialize_system(self, args, kwargs, action_space, file_name):
-        """Initialize both ROS and RL systems"""
+        # Initialize RL components
         self._initialize_rl(args, kwargs, action_space, file_name)
-        self._initialize_ros()
-        rospy.loginfo("Robot Trainer initialized successfully\n")
-
-        print("=============================================")
-        print("START")
-        print("=============================================")
-
-    def _initialize_ros(self):
-        """Initialize ROS nodes, publishers, and services"""
-        try:
-            # Initialize ROS node and publishers
-            rospy.init_node('robot_trainer', anonymous=True)                                    # Initialize ROS node
-            self.cmd_vel_pub = rospy.Publisher('/turtlebot_14/cmd_wheels', Vector3, queue_size=1)                 # Initialize velocity publisher
-            
-            # Initialize odometry subscriber
-            rospy.Subscriber('/turtlebot_14/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
-            rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
-
-        except rospy.ROSException as e:
-            rospy.logerr(f"ROS initialization failed: {e}")
-            raise
-
+        
     def _initialize_rl(self, args, kwargs, action_space, file_name):
         """Initialize RL policy and replay buffer"""
         try:
@@ -154,11 +68,13 @@ class RobotTrainer:
 
                 #self.load_model()   # load the model as a pkl file
 
-                # Load the Parameters of the Neural Net
-                self.policy.load(f"./models/{policy_file}")
+                try:
+                    # Load the Parameters of the Neural Net
+                    self.policy.load(f"./runs/TD3/models/87_{policy_file}") # 76 - 79 - 85 - 87
+                    self.save_model()   # save the model as a pkl file
+                except:
+                    pass
 
-                self.save_model()   # save the model as a pkl file
-            
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
             rospy.loginfo("RL components initialized")
@@ -199,10 +115,6 @@ class RobotTrainer:
         
         pkl.dump(p_actor, open(f'actor_params_{self.file_name}.pkl', 'wb'))
         pkl.dump(p_critic, open(f'critic_params_{self.file_name}.pkl', 'wb'))
-
-
-    def callback(self, msg):
-        print("FINISHED")
 
 
 def init():
@@ -300,8 +212,8 @@ def main():
 
     # Initialize the robot trainer
     trainer = RobotTrainer(args, kargs, action_space, file_name)
-    trainer.initial_time = rospy.get_time()
-    trainer.start_time = rospy.get_time()                           # Init the episode time
+
+    print("Model converted for tbot - FINISHED")
 
 if __name__ == "__main__":
     main()

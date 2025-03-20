@@ -50,7 +50,7 @@ class RobotTrainer:
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
+        self.GOAL_DIST = 0.5
         self.OBST_W = 0.5
         self.OBST_D = 0.2
         self.HOME = np.array([-1, 0.0])
@@ -221,9 +221,6 @@ class RobotTrainer:
 
     def select_action(self, state):
 
-        if self.expl_noise > 0.1:
-            self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 5e4)
-
         """Select action based on current policy or random sampling"""
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             # Get action from the policy (linear and angular velocities)
@@ -346,7 +343,6 @@ class RobotTrainer:
             #self.log_episode_stats(episode_time) # Log episode stats
             self.save_stats() # Save stats
         
-            
             # Reset simulation
             self.reset_simulation()
             # Change initial position
@@ -403,8 +399,11 @@ class RobotTrainer:
         # Reset episode if done
         if done:
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 print("YOU WIN")
+            
+            if self.expl_noise > 0.1:
+                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
             self.RESET = True
             print("=============================================")
@@ -446,7 +445,7 @@ class RobotTrainer:
 
             self.evaluation_reward_list.append(self.evaluation_reward)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= 0.15:
+            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
                 print("YOU WIN")
                 self.evaluation_success_list.append(1)
             else:
@@ -488,16 +487,22 @@ class RobotTrainer:
     def callback(self, msg):
         """Callback method"""
 
-        if  (self.total_training_time // 3600) >= 3:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
+        #if  (self.total_training_time // 3600) >= 3:
         
-        if (self.episode_count % self.EVAL_FREQ) == 0:
+        if self.episode_count > 400:
+            if self.evaluation_count < 5:
+                self.evaluation(msg)
+                self.evaluation_count = 6
+            else:
+                print("EXITING. GOODBYE!")
+                self.publish_velocity([0.0, 0.0])
+                rospy.signal_shutdown("EXITING. GOODBYE!")
+                return
+        elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
             self.training_loop(msg)
+            rospy.sleep(1/6)
 
 
 

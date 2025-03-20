@@ -14,6 +14,7 @@ from geometry_msgs.msg import Twist, Pose
 from std_srvs.srv import Empty
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
+from visualization_msgs.msg import Marker
 
 import tf.transformations
 from gym import spaces
@@ -197,7 +198,7 @@ class RobotTrainer:
             #rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
             return True
         return False
-    
+
     def get_state_from_odom(self, msg):
         """Extract and process state information from odometry message for free exploration."""
 
@@ -247,29 +248,19 @@ class RobotTrainer:
         state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
         return state
 
-    def compute_reward(self, state):
+    def compute_reward(self, state, next_state):
         # Unpack the state components
-        distance = state[0]
-        e_theta_g = state[1]
-        v_perp = state[3]
-        angular_vel = state[4]
-        d_obs = state[5]
+        next_distance = next_state[0]
         
-        # Parameters for reward shaping (for normal behavior)
-        k_distance = 1.0    # Weight for distance penalty (in meters)
-        k_heading  = 0.5    # Weight for heading error penalty (in radians)
-        k_lateral  = 0.1    # Weight for lateral velocity penalty
-        k_ang_vel  = 0.1    # Weight for angular velocity penalty
-        
-        goal_threshold = 0.15  # Distance below which the goal is considered reached (meters)
+        goal_threshold = self.GOAL_DIST   # Distance below which the goal is considered reached (meters)
         goal_reward = 100.0   # Reward bonus for reaching the goal
         
         # New penalty constants for abnormal events:
-        boundary_penalty = -50.0   # Penalty for leaving the allowed area
-        collision_penalty = -100.0 # Penalty for colliding with the obstacle
+        boundary_penalty = -25.0   # Penalty for leaving the allowed area
+        collision_penalty = -50.0 # Penalty for colliding with the obstacle
         
         # Check if the goal is reached
-        if distance < goal_threshold:
+        if next_distance < goal_threshold:
             print("WIN")
             return goal_reward, True
         
@@ -283,13 +274,12 @@ class RobotTrainer:
             print("COLLISION")
             return collision_penalty, True
         
-        # Compute the "normal" reward as a combination of penalties
-        reward = - (k_distance * distance +
-                    k_heading  * abs(e_theta_g) +
-                    k_lateral  * abs(v_perp) +
-                    k_ang_vel  * abs(angular_vel))
-        
-        reward = d_obs - 2*distance
+        if state is not None:
+            distance = state[0]
+            delta_d = distance - next_distance
+            reward = 2 if delta_d > 0.01 else -1
+        else:
+            reward = 0
         
         return reward, False
 
@@ -366,7 +356,6 @@ class RobotTrainer:
             
             #self.log_episode_stats(episode_time) # Log episode stats
             self.save_stats() # Save stats
-        
             
             # Reset simulation
             self.reset_simulation()
@@ -398,7 +387,7 @@ class RobotTrainer:
             
         action = self.select_action(next_state)                 # Select action
 
-        reward, terminated = self.compute_reward(next_state)
+        reward, terminated = self.compute_reward(self.old_state, next_state)
 
         done = done or terminated                           # Episode termination
         self.current_episode_reward += reward               # Update episode reward
@@ -424,7 +413,7 @@ class RobotTrainer:
         # Reset episode if done
         if done:
 
-            if self.expl_noise > 0.1:
+            if self.expl_noise > 0.05:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
             self.RESET = True
@@ -443,7 +432,7 @@ class RobotTrainer:
         else:
             action = self.policy.select_action(next_state)                      # Select action
 
-        reward, terminated = self.compute_reward(next_state)
+        reward, terminated = self.compute_reward(self.old_state, next_state)
 
         done = done or terminated                           # Episode termination
         self.evaluation_reward += reward                    # Update episode reward
@@ -467,7 +456,7 @@ class RobotTrainer:
 
             self.evaluation_reward_list.append(self.evaluation_reward)
 
-            if np.linalg.norm([self.x, self.y] - self.GOAL) <= 0.15:
+            if np.linalg.norm([self.x, self.y] - self.GOAL) <= self.GOAL_DIST :
                 self.evaluation_success_list.append(1)
             else:
                 self.evaluation_success_list.append(0)
@@ -510,13 +499,16 @@ class RobotTrainer:
 
         # if  (self.total_training_time // 3600) >= 3:
         
-        if self.episode_count >= 400:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
-        
-        if (self.episode_count % self.EVAL_FREQ) == 0:
+        if self.episode_count > 400:
+            if self.evaluation_count < 5:
+                self.evaluation(msg)
+                self.evaluation_count = 6
+            else:
+                print("EXITING. GOODBYE!")
+                self.publish_velocity([0.0, 0.0])
+                rospy.signal_shutdown("EXITING. GOODBYE!")
+                return
+        elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
             self.training_loop(msg)
