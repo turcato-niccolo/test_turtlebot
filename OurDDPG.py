@@ -114,6 +114,7 @@ class DDPG(object):
 		self.actor.load_state_dict(torch.load(filename + "_actor", map_location=torch.device('cpu')))
 		self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer", map_location=torch.device('cpu')))
 		self.actor_target = copy.deepcopy(self.actor)
+		
 
 	# def load(self, filename):
 	# 	self.critic.load_state_dict(torch.load(filename + "_critic"))

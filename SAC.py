@@ -133,12 +133,13 @@ class SAC(object):
         torch.save(self.policy_optim.state_dict(), filename + "_actor_optimizer")
     
     def load(self, filename, evaluate=False):
-        self.critic.load_state_dict(torch.load(filename + "_critic"))
-        self.critic_optim.load_state_dict(torch.load(filename + "_critic_optimizer"))
-        self.critic_target.load_state_dict(torch.load(filename + "_critic_target"))
+
+        self.critic.load_state_dict(torch.load(filename + "_critic", map_location=torch.device('cpu')))
+        self.critic_optim.load_state_dict(torch.load(filename + "_critic_optimizer", map_location=torch.device('cpu')))
+        self.critic_target = copy.deepcopy(self.critic)
         
-        self.policy.load_state_dict(torch.load(filename + "_actor"))
-        self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.policy.load_state_dict(torch.load(filename + "_actor", map_location=torch.device('cpu')))
+        self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer", map_location=torch.device('cpu')))
         self.actor_target = copy.deepcopy(self.actor)
 
         if evaluate:

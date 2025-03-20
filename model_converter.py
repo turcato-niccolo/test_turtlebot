@@ -66,11 +66,9 @@ class RobotTrainer:
             if args.load_model != "":
                 policy_file = file_name if args.load_model == "default" else args.load_model
 
-                #self.load_model()   # load the model as a pkl file
-
                 try:
                     # Load the Parameters of the Neural Net
-                    self.policy.load(f"./runs/TD3/models/87_{policy_file}") # 76 - 79 - 85 - 87
+                    self.policy.load(f"./runs/{args.policy}/models/87_{policy_file}") # 76 - 79 - 85 - 87
                     self.save_model()   # save the model as a pkl file
                 except:
                     pass
