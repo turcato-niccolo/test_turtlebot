@@ -564,7 +564,7 @@ class RobotTrainer:
             self.RESET = False
             self.start_time = rospy.get_time()
 
-            if (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
+            if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
                 print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")

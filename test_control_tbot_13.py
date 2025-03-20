@@ -567,7 +567,7 @@ class RobotTrainer:
             self.start_time = rospy.get_time()
             self.publish_velocity([linear_velocity, angular_velocity])
 
-            if (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
+            if (self.episode_count % self.EVAL_FREQ) == 0:
                 print("=============================================")
                 print(f"HOME REACHED - STARTING THE EVALUATION {self.evaluation_count}")
                 print("=============================================")
