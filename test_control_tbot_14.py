@@ -339,7 +339,7 @@ class RobotTrainer:
         # Check boundary
         if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
             terminated = True
-            #print("WALL")
+            print("WALL")
 
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
@@ -348,7 +348,7 @@ class RobotTrainer:
             self.collision_count += 1
             self.success = 0
             self.collision = 1
-            #print("OBSTACLE")
+            print("OBSTACLE")
             
         
         # Check goal achievement
@@ -724,17 +724,14 @@ class RobotTrainer:
         """Callback method"""
         elapsed_time = rospy.get_time() - self.initial_time
 
-        #if  (elapsed_time // 3600) >= 1:
+        #if  (elapsed_time // 3600) >= 3:
         if  (self.episode_count) > 100:
-            if self.evaluation_count < 5:
-                self.evaluation(msg)
-                self.evaluation_count = 6
-            else:
-                print("EXITING. GOODBYE!")
-                self.publish_velocity([0.0, 0.0])
-                rospy.signal_shutdown("EXITING. GOODBYE!")
-                return
-        elif self.RESET:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+        
+        if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
         elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
