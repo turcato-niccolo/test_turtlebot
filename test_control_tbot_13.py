@@ -153,7 +153,7 @@ class RobotTrainer:
                 #self.save_model()   # save the model as a pkl file
 
                 # Load the previous Statistics
-                loaded_data = np.load(f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz")
+                """loaded_data = np.load(f"./runs/run_20250317/results/stats_{self.file_name}_{self.seed}.npz")
                 self.episodes = loaded_data['Total_Episodes'].tolist()
                 self.rewards = loaded_data['Total_Reward'].tolist()
                 self.success_list = loaded_data['Success_Rate'].tolist()
@@ -167,7 +167,7 @@ class RobotTrainer:
 
                 # Load replay buffer
                 with open(f"./runs/run_20250317/replay_buffers/replay_buffer_{self.file_name}_{self.seed}.pkl", 'rb') as f:
-                    self.replay_buffer = pkl.load(f)
+                    self.replay_buffer = pkl.load(f)"""
             
 
             #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
