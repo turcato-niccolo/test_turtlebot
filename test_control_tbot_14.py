@@ -177,8 +177,8 @@ class RobotTrainer:
             rospy.logerr(f"RL initialization failed: {e}")
     
     def load_model(self, args):
-        actor_params = pkl.load(open(f'./models_params/actor_params_{self.file_name}.pkl', 'rb')) 
-        critic_params = pkl.load(open(f'./models_params/critic_params_{self.file_name}.pkl', 'rb'))
+        actor_params = pkl.load(open(f'./models_params/{args.policy}/actor_params_{self.file_name}.pkl', 'rb')) 
+        critic_params = pkl.load(open(f'./models_params/{args.policy}/critic_params_{self.file_name}.pkl', 'rb'))
 
         if 'TD3' in args.policy:
             #Actor
