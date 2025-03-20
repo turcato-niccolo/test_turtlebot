@@ -736,7 +736,7 @@ class RobotTrainer:
         
         if self.RESET:
             self.come_back_home(msg)   # The robot is coming back home
-        elif (self.episode_count % self.EVAL_FREQ) == 0 and self.episode_count > 1:
+        elif (self.episode_count % self.EVAL_FREQ) == 0:
             self.evaluation(msg)
         else:
             self.training_loop(msg)    # The robot is running in the environment
