@@ -639,10 +639,6 @@ class RobotTrainer:
         next_state = self.get_state_from_odom(msg)
 
         self.trajectory.append(next_state[:3])
-
-        np.save(
-                f"./runs/run_20250317/trajectories/{self.seed}/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npy",
-                np.array(self.trajectory))
             
         action = self.policy.select_action(next_state)                  # Select action
         
@@ -667,6 +663,10 @@ class RobotTrainer:
 
         # Reset episode if done
         if done:
+            np.save(
+                f"./runs/run_20250317/trajectories/{self.seed}/trajectory_{self.file_name}_{self.count_eval}_{self.evaluation_count}.npy",
+                np.array(self.trajectory))
+            
             self.RESET = True
             self.publish_velocity([0.0, 0.0])
 
