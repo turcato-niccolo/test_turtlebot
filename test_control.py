@@ -7,6 +7,7 @@ import tf
 import os
 import time
 from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
 import sys
 
 from nav_msgs.msg import Odometry
@@ -27,7 +28,7 @@ import SAC
 import utils
 
 class RobotTrainer:
-    def __init__(self, args, kwargs, action_space, file_name):
+    def __init__(self, args, kwargs, file_name):
         # Constants
         self.STATE_DIM = 6
         self.ACTION_DIM = 2
@@ -35,12 +36,8 @@ class RobotTrainer:
         self.BUFFER_SIZE = 10**5
         self.BATCH_SIZE = args.batch_size
         self.TRAINING_START_SIZE = args.start_timesteps
-        self.SAMPLE_FREQ = 1 / 8
-        self.MAX_STEP_EPISODE = 200
-        self.MAX_TIME = self.MAX_STEP_EPISODE * self.SAMPLE_FREQ
         self.MAX_TIME = 20
         self.EVAL_FREQ = args.eval_freq
-        self.EVALUATION_FLAG = False
         self.expl_noise = args.expl_noise
 
         self.file_name = file_name
@@ -49,11 +46,11 @@ class RobotTrainer:
         # Environment parameters
         self.GOAL = np.array([1.0, 0.0])
         self.OBSTACLE = np.array([0.0, 0.0])
+        self.HOME = np.array([-1, 0.0])
         self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.5
+        self.GOAL_DIST = 0.15
         self.OBST_W = 0.5
         self.OBST_D = 0.2
-        self.HOME = np.array([-1, 0.0])
         
         # Reward parameters
         self.DISTANCE_PENALTY = 0.5
@@ -100,11 +97,11 @@ class RobotTrainer:
         self.RESET = False
         
         # Initialize ROS and RL components
-        self._initialize_system(args, kwargs, action_space, file_name)
+        self._initialize_system(args, kwargs, file_name)
 
-    def _initialize_system(self, args, kwargs, action_space, file_name):
+    def _initialize_system(self, args, kwargs, file_name):
         """Initialize both ROS and RL systems"""
-        self._initialize_rl(args, kwargs, action_space, file_name)
+        self._initialize_rl(args, kwargs, file_name)
         self._initialize_ros()
         rospy.loginfo("Robot Trainer initialized successfully\n")
 
@@ -120,10 +117,6 @@ class RobotTrainer:
             self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)                 # Initialize velocity publisher
             self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)       # Initialize simulation reset service
             
-            # Wait for gazebo services
-            rospy.wait_for_service('/gazebo/set_model_state', timeout=10.0)                     # Wait for gazebo service
-            self.set_model_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState) # Initialize model state service
-            
             # Initialize odometry subscriber
             rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
             rospy.loginfo("ROS initialization completed")                                       # Log ROS initialization success
@@ -132,73 +125,80 @@ class RobotTrainer:
             rospy.logerr(f"ROS initialization failed: {e}")
             raise
 
-    def _initialize_rl(self, args, kwargs, action_space, file_name):
+    def _initialize_rl(self, args, kwargs, file_name):
         """Initialize RL policy and replay buffer"""
-        try:
-            self.replay_buffer = utils.ReplayBuffer(
-                self.STATE_DIM, 
-                self.ACTION_DIM, 
-                max_size=self.BUFFER_SIZE
-            )
 
-            if 'DDPG' in args.policy:
-                self.policy = OurDDPG.DDPG(**kwargs)
-            elif 'TD3' in args.policy:
-                self.policy = TD3.TD3(**kwargs)
-            elif 'SAC' in args.policy:
-                self.policy = SAC.SAC(**kwargs)
-                self.expl_noise = 0.0
-            elif 'ExpD3' in args.policy:
-                self.policy = ExpD3.DDPG(**kwargs)
-            else:
-                raise NotImplementedError("Policy {} not implemented".format(args.policy))
+        # Initialize the replay buffer
+        self.replay_buffer = utils.ReplayBuffer(
+            self.STATE_DIM, 
+            self.ACTION_DIM, 
+            max_size=self.BUFFER_SIZE
+        )
 
-            # Load model and data
-            if args.load_model != "":
+        # Initialize policy based on selected RL algorithm
+        if 'DDPG' in args.policy:
+            self.policy = OurDDPG.DDPG(**kwargs)
+        elif 'TD3' in args.policy:
+            self.policy = TD3.TD3(**kwargs)
+        elif 'SAC' in args.policy:
+            self.policy = SAC.SAC(**kwargs)
+            self.expl_noise = 0.0
+        elif 'ExpD3' in args.policy:
+            self.policy = ExpD3.DDPG(**kwargs)
+        else:
+            raise NotImplementedError(f"Policy {args.policy} not implemented")
+
+        # Load model and previous statistics if specified
+        if args.load_model:
+            try:
                 policy_file = file_name if args.load_model == "default" else args.load_model
 
                 # Load the Parameters of the Neural Net
                 self.policy.load(f"./models/{policy_file}")
 
-                # Load the previous Statistics
-                loaded_data = np.load(f"./results/stats_{self.file_name}.npz")
+                # Load previous statistics
+                stats_file = f"./results/stats_{self.file_name}.npz"
+                loaded_data = np.load(stats_file)
+
                 self.episodes = loaded_data['Total_Episodes'].tolist()
                 self.rewards = loaded_data['Total_Reward'].tolist()
                 self.success_list = loaded_data['Success_Rate'].tolist()
                 self.collisions = loaded_data['Collision_Rate'].tolist()
                 self.training_time = loaded_data['Training_Time'].tolist()
                 self.total_steps = loaded_data['Total_Steps'].tolist()
-                self.evaluation_reward_list = np.load("./results/eval_TD3_256_256_0.npz")['Evaluation_Reward_List'].tolist()
+                
+                eval_file = "./results/eval_TD3_256_256_0.npz"
+                self.evaluation_reward_list = np.load(eval_file)['Evaluation_Reward_List'].tolist()
 
                 self.episode_count = self.episodes[-1]
                 self.total_training_time = self.training_time[-1]
 
-                # Load replay buffer
+            except FileNotFoundError as e:
+                rospy.logwarn(f"Stats file not found: {e}, starting fresh.")
+            except Exception as e:
+                rospy.logerr(f"Failed to load model or stats: {e}")
+                raise  # Raising the error ensures it doesn't silently continue with incorrect data
+
+            # Load replay buffer separately
+            try:
                 with open(f"./replay_buffers/replay_buffer_{self.file_name}.pkl", 'rb') as f:
                     self.replay_buffer = pickle.load(f)
-            
+            except FileNotFoundError:
+                rospy.logwarn("Replay buffer file not found, starting with an empty buffer.")
+            except Exception as e:
+                rospy.logerr(f"Failed to load replay buffer: {e}")
+                raise  # Don't proceed with an invalid replay buffer
 
-            #self.policy = TD3.TD3(self.STATE_DIM, self.ACTION_DIM, max_action=1)
-            rospy.loginfo("RL components initialized")
-        except Exception as e:
-            rospy.logerr(f"RL initialization failed: {e}")
-            raise
-    
+        rospy.loginfo("RL components initialized")
+   
     def check_timeout(self):
-        """Check if the current episode has exceeded the maximum time limit"""
-        if self.start_time is None:
-            return False
-        
-        elapsed_time = rospy.get_time() - self.start_time    # Check elapsed time
-        if elapsed_time > self.MAX_TIME:
-            #rospy.loginfo(f"Episode timed out after {elapsed_time:.2f} seconds")
-            return True
-        return False
-    
+        """Returns True if the episode has exceeded the maximum time limit, else False."""
+        return self.start_time is not None and (rospy.get_time() - self.start_time) > self.MAX_TIME
+
     def get_state_from_odom(self, msg):
         """Extract state information from odometry message"""
         # Robot position
-        x = msg.pose.pose.position.x + self.HOME[0] # TODO: piece of shit change because I'm lazy af
+        x = msg.pose.pose.position.x + self.HOME[0]
         y = msg.pose.pose.position.y + self.HOME[1]
         
         # Get orientation
@@ -238,54 +238,70 @@ class RobotTrainer:
         return action
 
     def compute_reward(self, state, next_state):
-        """Reward computation"""
-
-        p = np.array(next_state[:2])
+        """Compute reward based on distance, movement, collisions, and goal achievement."""
+        
+        p = np.array(next_state[:2])  # Current position
         dist_to_goal = np.linalg.norm(p - self.GOAL)
-        
-        # Initialize reward and termination flag
-        reward = 0
+        reward = -self.DISTANCE_PENALTY * dist_to_goal ** 2 + self.GAUSSIAN_REWARD_SCALE * np.exp(-dist_to_goal**2)
         terminated = False
-        
-        # Distance-based reward components
-        reward -= self.DISTANCE_PENALTY * dist_to_goal ** 2
-        reward += self.GAUSSIAN_REWARD_SCALE * np.exp(-dist_to_goal**2)
-        
+
+        # Movement reward/penalty
         if state is not None:
-            prev = np.array(state[:2])
-            # Calculate prev distance
-            prev_dist_to_goal = np.linalg.norm(prev - self.GOAL)
+            prev_dist_to_goal = np.linalg.norm(np.array(state[:2]) - self.GOAL)
+            reward += self.MOVEMENT_PENALTY if dist_to_goal < prev_dist_to_goal else -self.MOVEMENT_PENALTY
 
-            # Movement reward/penalty
-            if dist_to_goal >= prev_dist_to_goal:
-                reward -= self.MOVEMENT_PENALTY
-            else:
-                reward += self.MOVEMENT_PENALTY
-        
-        bound_x = self.WALL_DIST + 0.2
-        bound_y = bound_x
-
-        # Check boundary
-        if np.abs(p[0]) >= bound_x or np.abs(p[1]) >= bound_y:
-            terminated = True
+        # Check if agent is out of bounds
+        if np.any(np.abs(p) >= self.WALL_DIST + 0.2):
+            print("DANGER ZONE")
+            return reward, True  # Terminate immediately if out of bounds
 
         # Check collision with obstacle
         if np.abs(p[0]) <= self.OBST_D / 2 and np.abs(p[1]) <= self.OBST_W / 2:
-            reward -= 10
-            terminated = True
             self.collision_count += 1
-            self.success = 0
-            self.collision = 1
-        
+            self.success, self.collision = 0, 1
+            print("OBSTACLE")
+            return reward - 10, True  # Immediate termination on collision
+
         # Check goal achievement
         if dist_to_goal <= self.GOAL_DIST:
-            reward += self.GOAL_REWARD
-            terminated = True
             self.success_count += 1
-            self.success = 1
-            self.collision = 0
-        
+            self.success, self.collision = 1, 0
+            print("WIN")
+            return reward + self.GOAL_REWARD, True  # Immediate termination on reaching goal
+
         return reward, terminated
+
+    def reset(self):
+        """Reset environment and update statistics at the end of an episode."""
+
+        if self.start_time is None:
+            return  # No episode to reset
+
+        # === Update Statistics ===
+        episode_time = rospy.get_time() - self.start_time
+        self.total_training_time += episode_time
+        self.total_steps += self.steps_in_episode
+        self.episode_rewards.append(self.current_episode_reward)
+        self.avg_episode_length.append(self.steps_in_episode)
+
+        # Save statistics
+        self.save_stats()
+
+        # === Reset Simulation & Environment ===
+        self.reset_simulation()
+
+        # Randomize initial position
+        r, theta = np.sqrt(np.random.uniform(0, 1)) * 0.1, np.random.uniform(0, 2 * np.pi)
+        self.HOME = np.array([-1 + r * np.cos(theta), r * np.sin(theta)])
+        
+        time.sleep(0.2)  # Allow time for reset
+
+        # === Reset Episode Variables ===
+        self.start_time = rospy.get_time()
+        self.current_episode_reward = 0
+        self.steps_in_episode = 0
+        self.episode_count += 1
+        self.old_state = self.old_action = None
 
     def log_episode_stats(self, episode_time):
         """Log detailed episode statistics"""
@@ -330,35 +346,6 @@ class RobotTrainer:
         with open(f"./runs/{self.policy_name}/replay_buffers/replay_buffer_{self.file_name}.pkl", 'wb') as f:
             pickle.dump(self.replay_buffer, f)
 
-    def reset(self):
-        """Reset method with statistics"""
-        if self.start_time is not None: # Episode finished
-            
-            episode_time = rospy.get_time() - self.start_time
-            self.total_training_time += episode_time
-            self.total_steps += self.steps_in_episode
-            self.episode_rewards.append(self.current_episode_reward)
-            self.avg_episode_length.append(self.steps_in_episode)
-            
-            #self.log_episode_stats(episode_time) # Log episode stats
-            self.save_stats() # Save stats
-        
-            # Reset simulation
-            self.reset_simulation()
-            # Change initial position
-            r = np.sqrt(np.random.uniform(0,1))*0.1
-            theta = np.random.uniform(0,2*np.pi)
-            self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
-            time.sleep(0.2)
-            
-            # Reset episode variables
-            self.start_time = rospy.get_time()
-            self.current_episode_reward = 0
-            self.steps_in_episode = 0
-            self.episode_count += 1
-            self.old_state = None
-            self.old_action = None
-
     def publish_velocity(self, action):
         """Publish velocity commands to the robot"""
         vel_msg = Twist()
@@ -367,92 +354,90 @@ class RobotTrainer:
         self.cmd_vel_pub.publish(vel_msg)
 
     def training_loop(self, msg):
-        # S,A,R,S',done
-        done = self.check_timeout()
+        """Main training loop for reinforcement learning."""
+        
+        # === Get State and Action ===
         next_state = self.get_state_from_odom(msg)
-            
-        action = self.select_action(next_state)                 # Select action
-
+        action = self.select_action(next_state)
+        
+        # === Compute Reward and Check Termination ===
         reward, terminated = self.compute_reward(self.old_state, next_state)
+        done = self.check_timeout() or terminated  # Episode termination condition
+        self.current_episode_reward += reward
+        self.steps_in_episode += 1
 
-        done = done or terminated                           # Episode termination
-        self.current_episode_reward += reward               # Update episode reward
-        self.steps_in_episode += 1                          # Update episode steps
-
-        a_in = [(action[0] + 1) / 2, action[1]]
-
+        # === Execute Action (if not done) ===
+        a_in = [(action[0] + 1) / 2, action[1]]  # Normalize action (0,1)
         if not done:
-            self.publish_velocity(a_in)                     # Execute action
+            self.publish_velocity(a_in)
 
-        # Add experience to replay buffer
+        # === Store Experience in Replay Buffer ===
         if self.old_state is not None and self.episode_count > 1:
             self.replay_buffer.add(self.old_state, self.old_action, next_state, reward, float(done))
-            
-        # Train policy
+        
+        # === Train Policy ===
         if self.replay_buffer.size > self.TRAINING_START_SIZE:
             self.policy.train(self.replay_buffer, batch_size=self.BATCH_SIZE)
 
-        # Update state and action
-        self.old_state = next_state if not done else None
-        self.old_action = action if not done else None
+        # === Update State and Action ===
+        self.old_state = None if done else next_state
+        self.old_action = None if done else action
 
-        # Reset episode if done
+        # === Handle Episode Termination ===
         if done:
+            self.expl_noise = max(0.1, self.expl_noise - (0.3 - 0.1) / 300)  # Decay exploration noise
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
-                print("YOU WIN")
-            
-            if self.expl_noise > 0.1:
-                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
-
+            # Reset flag and log episode details
             self.RESET = True
-            print("=============================================")
-            print(f"EPISODE {self.episode_count} - Reward: {self.current_episode_reward:.3f} - Exp noise {self.expl_noise:.3}")
-            print("=============================================")
-            self.publish_velocity([0.0, 0.0])
+            print("=" * 45)
+            print(f"EPISODE {self.episode_count} - Reward: {self.current_episode_reward:.3f} - Exp noise: {self.expl_noise:.3f}")
+            print("=" * 45)
+
+            self.publish_velocity([0.0, 0.0])  # Stop movement
             self.reset()
 
     def evaluation(self, msg):
-        done = self.check_timeout()
-        next_state = self.get_state_from_odom(msg)
+        """Evaluation process to assess agent performance."""
         
+        # === Get Next State and Select Action ===
+        next_state = self.get_state_from_odom(msg)
         if self.expl_noise == 0:
-            action = self.policy.select_action(next_state, evaluate=True)       # Select action
+            action = self.policy.select_action(next_state, evaluate=True)
         else:
-            action = self.policy.select_action(next_state)                      # Select action
-
+            action = self.policy.select_action(next_state)
+        
+        # === Compute Reward and Check Termination ===
         reward, terminated = self.compute_reward(self.old_state, next_state)
+        done = self.check_timeout() or terminated
+        self.evaluation_reward += reward
 
-        done = done or terminated                           # Episode termination
-        self.evaluation_reward += reward                    # Update episode reward
+        # === Update State and Action ===
+        self.old_state = None if done else next_state
+        self.old_action = None if done else action
 
-        # Update state and action
-        self.old_state = next_state if not done else None
-        self.old_action = action if not done else None
-
+        # === Execute Action (if not done) ===
         a_in = [(action[0] + 1) / 2, action[1]]
-
         if not done:
-            self.publish_velocity(a_in)              # Execute action
+            self.publish_velocity(a_in)
 
-        # Reset episode if done
+        # === Handle Episode Termination ===
         if done:
             self.RESET = True
-            print("=============================================")
+            print("=" * 45)
             print(f"EVALUATION {self.evaluation_count + 1} IS DONE.")
-            print("=============================================")
-            self.publish_velocity([0.0, 0.0])
+            print("=" * 45)
 
+            self.publish_velocity([0.0, 0.0])  # Stop movement
             self.evaluation_reward_list.append(self.evaluation_reward)
 
-            if np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST:
+            # Track success
+            success = int(np.linalg.norm(next_state[:2] - self.GOAL) <= self.GOAL_DIST)
+            if success:
                 print("YOU WIN")
-                self.evaluation_success_list.append(1)
-            else:
-                self.evaluation_success_list.append(0)
-            
-            self.reset()
+            self.evaluation_success_list.append(success)
 
+            # Reset evaluation reward and update counters
+            self.reset()
             self.evaluation_reward = 0
 
             if self.evaluation_count < 4:
@@ -462,66 +447,63 @@ class RobotTrainer:
                 self.count_eval += 1
                 self.time_list.append(self.total_training_time)
                 self.evaluation_count = 0
+                
+                # Compute statistics
                 avrg_reward = sum(self.evaluation_reward_list[-5:]) / 5
                 avrg_success = sum(self.evaluation_success_list[-5:]) / 5
-
                 self.average_success_list.append(avrg_success)
                 self.average_reward_list.append(avrg_reward)
 
+                # Save evaluation results
                 np.savez(
-                f"./runs/{self.policy_name}/results/eval_{self.file_name}.npz",
-                Evaluation_Reward_List=self.average_reward_list,
-                Evaluation_Success_List=self.average_success_list,
-                Total_Time_List=self.time_list)
+                    f"./runs/{self.policy_name}/results/eval_{self.file_name}.npz",
+                    Evaluation_Reward_List=self.average_reward_list,
+                    Evaluation_Success_List=self.average_success_list,
+                    Total_Time_List=self.time_list
+                )
 
-                print("\n=============================================")
+                print("\n" + "=" * 45)
                 print(f"EVALUATION STATISTICS # {self.count_eval}")
                 print(f"Reward:          {self.average_reward_list[-1]:.1f}")
                 print(f"Average Success: {self.average_success_list[-1]:.2f}")
-                print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1]%3600) // 60} min")
-                print("=============================================")
+                print(f"Total Time:      {self.time_list[-1]//3600:.0f} h {(self.time_list[-1] % 3600) // 60} min")
+                print("=" * 45)
 
                 # Save model
                 self.policy.save(f"./runs/{self.policy_name}/models/{self.count_eval}_{self.file_name}")
-    
-    def callback(self, msg):
-        """Callback method"""
 
-        #if  (self.total_training_time // 3600) >= 3:
-        
+    def callback(self, msg):
+        """Handles incoming odometry data and decides between training, evaluation or coming home."""
+
         if self.episode_count > 400:
             if self.evaluation_count < 5:
                 self.evaluation(msg)
-                self.evaluation_count = 6
+                self.evaluation_count = 6  # Prevents repeated evaluation in the same callback
             else:
                 print("EXITING. GOODBYE!")
                 self.publish_velocity([0.0, 0.0])
                 rospy.signal_shutdown("EXITING. GOODBYE!")
                 return
-        elif (self.episode_count % self.EVAL_FREQ) == 0:
+        elif self.episode_count % self.EVAL_FREQ == 0:
             self.evaluation(msg)
         else:
             self.training_loop(msg)
-            rospy.sleep(1/6)
-
-
+            #rospy.sleep(1 / 6)
 
 
 def init():
-    print("""
-    \n\n\n
-    RUNNING MAIN...
-    \n\n\n
-    """)
+
+    print("""\n\n\nRUNNING MAIN...\n\n\n""")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", default="TD3")                              # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--seed", default=0, type=int)                          # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--max_timesteps", default=1e3, type=int)               # Max time steps to run environment
+    parser.add_argument("--max_timesteps", default=1e6, type=int)               # Max time steps to run environment
     parser.add_argument("--batch_size", default=128, type=int)                  # Batch size for both actor and critic
     parser.add_argument("--hidden_size", default=64, type=int)	                # Hidden layers size
     parser.add_argument("--start_timesteps", default=5e3, type=int)		        # Time steps initial random policy is used
     parser.add_argument("--eval_freq", default=20, type=int)       	            # How often (episodes) we evaluate
-    parser.add_argument("--expl_noise", default=0.3, type=float)    	        # Std of Gaussian exploration noise
+    parser.add_argument("--expl_noise", default=0.1, type=float)    	        # Std of Gaussian exploration noise
     parser.add_argument("--discount", default=0.99, type=float)                 # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)                     # Target network update rate
     parser.add_argument("--policy_noise", default=0.2)                          # Noise added to target policy during critic update
@@ -601,10 +583,10 @@ def init():
     os.makedirs(f"./runs/{args.policy}/replay_buffers", exist_ok=True)
     
     print("=============================================================================================")
-    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Freq: {10} Hz, Seed: {args.seed}")
+    print(f"Policy: {args.policy}, Hidden Size: {args.hidden_size}, Batch Size: {args.batch_size}, Seed: {args.seed}")
     print("=============================================================================================\n")
     
-    return args, kwargs, action_space, file_name
+    return args, kwargs, file_name, writer
 
 def reset_simulation():
     rospy.wait_for_service('/gazebo/reset_simulation')
@@ -617,11 +599,11 @@ def reset_simulation():
 def main():
 
     # Set the parameters
-    args, kargs, action_space, file_name = init()
+    args, kargs, file_name = init()
     # Reset gazebo simulation
     reset_simulation()
     # Initialize the robot trainer
-    trainer = RobotTrainer(args, kargs, action_space, file_name)
+    trainer = RobotTrainer(args, kargs, file_name)
     trainer.reset()                                                 # Reset to start
     trainer.initial_time = rospy.get_time()
     trainer.start_time = rospy.get_time()                           # Init the episode time
