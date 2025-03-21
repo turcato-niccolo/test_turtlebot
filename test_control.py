@@ -6,15 +6,10 @@ import numpy as np
 import tf
 import os
 import time
-from datetime import datetime
-from torch.utils.tensorboard import SummaryWriter
-import sys
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist
 from std_srvs.srv import Empty
-from gazebo_msgs.msg import ModelState
-from gazebo_msgs.srv import SetModelState
 
 import tf.transformations
 from gym import spaces
