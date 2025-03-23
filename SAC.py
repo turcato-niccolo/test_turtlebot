@@ -140,7 +140,6 @@ class SAC(object):
         
         self.policy.load_state_dict(torch.load(filename + "_actor", map_location=torch.device('cpu')))
         self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer", map_location=torch.device('cpu')))
-        self.actor_target = copy.deepcopy(self.actor)
 
         if evaluate:
             self.policy.eval()

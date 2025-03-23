@@ -6,15 +6,11 @@ import numpy as np
 import tf
 import os
 import time
-from datetime import datetime
-import sys
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist
 from std_srvs.srv import Empty
-from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
-from visualization_msgs.msg import Marker
 
 import tf.transformations
 from gym import spaces
@@ -249,7 +245,6 @@ class RobotTrainer:
         return state
 
     def compute_reward(self, state, next_state):
-        # Unpack the state components
         next_distance = next_state[0]
         
         goal_threshold = self.GOAL_DIST   # Distance below which the goal is considered reached (meters)
@@ -518,11 +513,8 @@ class RobotTrainer:
 
 
 def init():
-    print("""
-    \n\n\n
-    RUNNING MAIN...
-    \n\n\n
-    """)
+    print("""\n\n\nRUNNING MAIN...\n\n\n""")
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", default="TD3")                              # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--seed", default=0, type=int)                          # Sets Gym, PyTorch and Numpy seeds
