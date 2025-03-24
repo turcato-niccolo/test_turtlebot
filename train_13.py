@@ -1,11 +1,12 @@
 from geometry_msgs.msg import Twist, Pose, Vector3
 from nav_msgs.msg import Odometry
-from train import GazeboEnv
 import tf.transformations
 import numpy as np
+import pickle
 import rospy
 import os
 
+from train import GazeboEnv
 from config import parse_args
 
 class RealEnv(GazeboEnv):
@@ -261,6 +262,10 @@ class RealEnv(GazeboEnv):
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
+                # Save buffer
+                with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
+                    pickle.dump(self.replay_buffer, f)
+
                 # Reset for next evaluation cycle
                 self.all_trajectories = []
                 self.epoch += 1
@@ -349,8 +354,8 @@ def main():
     print("\nRUNNING MAIN...")
     args, kwargs = parse_args()
     
-    os.makedirs("./runs/replay_buffers", exist_ok=True)
     os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs/replay_buffers/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
     
