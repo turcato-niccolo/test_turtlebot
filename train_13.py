@@ -25,9 +25,19 @@ class RealEnv(GazeboEnv):
     def _init_parameters(self, args):
         super()._init_parameters(args)
 
+        # Initialize flags for state management
         self.train_flag = False
         self.evaluate_flag = False
+        self.stop_flag = False
         self.come_flag = True
+        self.move_flag = False
+        self.rotation_flag = True
+        self.initial_positioning = True
+
+        # Episode counters
+        self.episode_num = 1  # Start from 1 since you're already using this convention
+        self.e = 1  # Evaluation counter should also start from 1 to match your output
+        self.eval_ep = 5  # Number of evaluation episodes
 
     def yaw_from_quaternion(self, q):
         x, y, z, w = q
@@ -47,8 +57,8 @@ class RealEnv(GazeboEnv):
 
         return transformed_vec[0], transformed_vec[1]
 
-    def odom(self):
-        """Extract state information from odometry message"""
+    """def odom(self):
+        '''Extract state information from odometry message'''
         # Robot position
         x = self.msg.pose.pose.position.x
         y = self.msg.pose.pose.position.y
@@ -94,10 +104,10 @@ class RealEnv(GazeboEnv):
         d_obs = np.linalg.norm([x, y])
         
         # Create the processed state vector
-        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
+        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])"""
 
-    def publish_velocity(self, action):
-        """Publish velocity commands to the robot"""
+    """def publish_velocity(self, action):
+        '''Publish velocity commands to the robot'''
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
         
@@ -108,7 +118,7 @@ class RealEnv(GazeboEnv):
         w_l = (v - w * d/2) / r
         vel_msg = Vector3(w_r, w_l, 0)
 
-        self.cmd_vel_pub.publish(vel_msg)
+        self.cmd_vel_pub.publish(vel_msg)"""
 
     def reset(self):
         """Reset the environment"""
@@ -161,23 +171,33 @@ class RealEnv(GazeboEnv):
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
-            self.reset()
+            
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
-            self.train_flag = False
-            self.evaluate_flag = False
-            self.come_flag = True
-            
+            # Reset episode variables
             self.episode_reward = 0
             self.episode_timesteps = 0
             self.count = 0
-            self.episode_num += 1
+            self.reset()
 
-            if ((self.episode_num - 1) % self.eval_freq) == 0:
+            # Check if it's time for evaluation (after this episode)
+            if self.episode_num % self.eval_freq == 0:
                 print("-" * 80)
                 print(f"VALIDATING - EPOCH {self.epoch + 1}")
                 print("-" * 80)
+                # Reset evaluation counters
+                self.e = 1  # Start evaluation counter from 1
+                self.avrg_reward = 0
+                self.suc = 0
+                self.col = 0
+            
+            # Increment episode number
+            self.episode_num += 1
+            
+            # Reset flags for come state
+            self.train_flag = False
+            self.come_flag = True
 
     def evaluate(self):
         self.trajectory.append([self.x, self.y])
@@ -204,22 +224,26 @@ class RealEnv(GazeboEnv):
         self.old_action = None if done else action
 
         if done:
-            self.suc += int(target)      # Increment suc if target is True (1)
-            self.col += int(not target)  # Increment col if target is False (0)
+            self.suc += int(target)
+            self.col += int(not target)
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Target: {target} - Time: {self.episode_time:.1f} sec")
             
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
+            
+            # Increment evaluation counter
             self.e += 1
             self.count = 0
-            self.reset()
-
-            self.train_flag = False
+            
+            # Reset flags for come state
             self.evaluate_flag = False
             self.come_flag = True
+            self.reset()
 
-            if self.e >= self.eval_ep:
+            # Check if we've completed all evaluation episodes
+            if self.e > self.eval_ep:  # Use > instead of >= since we already incremented
+                # Process and save evaluation results
                 self.avrg_reward /= self.eval_ep
                 avrg_col = self.col / self.eval_ep
                 avrg_suc = self.suc / self.eval_ep
@@ -228,66 +252,98 @@ class RealEnv(GazeboEnv):
                 print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
                 print("-" * 50)
 
+                # Save evaluation results
                 self.evaluations_reward.append(self.avrg_reward)
                 self.evaluations_suc.append(avrg_suc)
-                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
+                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", 
+                        **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
-
+                # Reset for next evaluation cycle
                 self.all_trajectories = []
-                self.avrg_reward = 0
-                self.suc = 0
-                self.col = 0
-                self. e = 0
-                self.epoch +=1
+                self.epoch += 1
 
     def come(self):
         """Come home function"""
         if self.rotation_flag:
-            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
+            if self.stop_flag:
+                angle_to_goal = np.arctan2(self.GOAL[1] - self.y, self.GOAL[0] - self.x)
+            else:
+                angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
             
             if abs(angle_to_goal - self.theta) > 0.05:
                 angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
                 self.publish_velocity([0, angular_speed])
             else:
-                self.publish_velocity([0,0])
+                self.publish_velocity([0, 0])
                 self.move_flag = True
                 self.rotation_flag = False
 
-        elif self.move_flag:
-            # Compute distance and angle to the goal
-            distance = np.sqrt((self.goal_x - self.x) ** 2 + (self.goal_y - self.y) ** 2)
-            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
+                if self.stop_flag:
+                    # Robot has arrived at destination after moving
+                    self.move_flag = False
+                    self.rotation_flag = True
+                    self.stop_flag = False
+                    
+                    # Special handling for initial positioning
+                    if self.initial_positioning:
+                        # After initial positioning, start training
+                        self.initial_positioning = False
+                        self.train_flag = True
+                        self.evaluate_flag = False
+                        self.come_flag = False
+                        return
+                    
+                    # Normal operation - decide next state
+                    if (self.episode_num - 1) % self.eval_freq == 0 and self.e <= self.eval_ep:
+                        # Time for evaluation (or continuing evaluation)
+                        self.evaluate_flag = True
+                        self.train_flag = False
+                    else:
+                        # Time for training
+                        self.train_flag = True
+                        self.evaluate_flag = False
+                    
+                    # Exit come state
+                    self.come_flag = False
 
-            # Proportional controller with increased speed
-            linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
-            angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)  # Increased max angular speed
+        elif self.move_flag:
+            # Movement logic remains the same
+            distance = np.sqrt((self.HOME[0] - self.x) ** 2 + (self.HOME[1] - self.y) ** 2)
+            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
+            angle_error = np.arctan2(np.sin(angle_to_goal - self.theta), np.cos(angle_to_goal - self.theta))
+
+            linear_speed = min(0.5 * distance, 0.5)
+            angular_speed = np.clip(1.0 * angle_error, -1.0, 1.0)
                 
             if distance < 0.05:  # Stop condition
                 self.publish_velocity([0, 0])
                 self.move_flag = False
                 self.rotation_flag = True
-
-                self.train_flag = True
-                self.evaluate_flag = False
-                self.come_flag = False
-
-                if ((self.episode_num - 1) % self.eval_freq) == 0:
-                    self.train_flag = False
-                    self.evaluate_flag = True
-                    self.come_flag = False
-
-                    if self.e >= self.eval_ep:
-                        self.train_flag = True
-                        self.evaluate_flag = False
-                        self.come_flag = False
+                self.stop_flag = True
             else:
                 self.publish_velocity([linear_speed, angular_speed])
-        else:
-            pass
 
+    def callback(self, msg):
+        # Update the state
+        self.msg = msg
+        self.odom()
+
+        # Check if we have exceeded the maximum number of episodes
+        if self.episode_num > self.max_episode + 1:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+
+        if self.come_flag:
+            self.come()
+        elif self.train_flag:
+            self.train()
+        elif self.evaluate_flag:
+            self.evaluate()
 
 def main():
     print("\nRUNNING MAIN...")
