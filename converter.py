@@ -121,10 +121,6 @@ class GazeboEnv:
                 file_to_load = args.load_model
                 self.epoch = int(file_to_load.split("/")[-1])
 
-                if self.epoch != 0:
-                    self.evaluations_reward = np.load(f"./runs/results/{args.policy}/evaluations_reward_seed{args.seed}.npy").tolist()
-                    self.evaluations_suc = np.load(f"./runs/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
-
             self.policy.load(file_to_load)
         else:
             pass

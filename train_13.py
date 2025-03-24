@@ -1,31 +1,54 @@
-from geometry_msgs.msg import Twist, Pose, Vector3
+from geometry_msgs.msg import Vector3
 from nav_msgs.msg import Odometry
-import tf.transformations
 import numpy as np
-import pickle
+import pickle as pkl
+import torch
 import rospy
 import os
 
-from train import GazeboEnv
+from algorithms import ExpD3
+from algorithms import OurDDPG
+from algorithms import TD3
+from algorithms import SAC
+
+from utils import ReplayBuffer
 from config import parse_args
+from train import GazeboEnv
 
 class RealEnv(GazeboEnv):
 
-    '''def _initialize_ros(self):
-        """Initialize ROS node and publishers/subscribers"""
+    def _initialize_ros(self):
         # Initialize ROS node and publishers
-        rospy.init_node('robot_trainer', anonymous=True)                                    # Initialize ROS node
-        self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)                 # Initialize velocity publisher
-        
+        rospy.init_node('robot_trainer', anonymous=True)                                        # Initialize ROS node
+        self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)   # Initialize velocity publisher
         # Initialize odometry subscriber
-        rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
+        rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)           # Initialize odometry subscriber
         rospy.loginfo("ROS initialization completed")
 
-        print("ENV INIT...")'''
+        print("ENV INIT...")
     
+    def _initialize_rl(self, args, kwargs):
+        '''Initialize the RL algorithm'''
+        state_dim = 6
+        self.action_dim = 2
+        buffer_size = int(1e5)
+
+        if 'DDPG' in args.policy:
+            self.policy = OurDDPG(**kwargs)
+        elif 'TD3' in args.policy:
+            self.policy = TD3(**kwargs)
+        elif 'SAC' in args.policy:
+            self.policy = SAC(**kwargs)
+        elif 'ExpD3' in args.policy:
+            self.policy = ExpD3(**kwargs)
+        else:
+            raise NotImplementedError("Policy {} not implemented".format(args.policy))
+        
+        self.replay_buffer = ReplayBuffer(state_dim, self.action_dim, buffer_size)
+        self.load_model_params(args)
+
     def _init_parameters(self, args):
         super()._init_parameters(args)
-
         # Initialize flags for state management
         self.train_flag = False
         self.evaluate_flag = False
@@ -34,11 +57,75 @@ class RealEnv(GazeboEnv):
         self.move_flag = False
         self.rotation_flag = True
         self.initial_positioning = True
-
         # Episode counters
-        self.episode_num = 1  # Start from 1 since you're already using this convention
-        self.e = 1  # Evaluation counter should also start from 1 to match your output
+        self.episode_num = 1  # Start from 1
+        self.e = 1  # Evaluation counter
         self.eval_ep = 5  # Number of evaluation episodes
+
+    def load_model_params(self, args):
+        '''Load model parameters from file'''
+        if args.load_model:
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'rb')) 
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'rb'))
+
+            if 'TD3' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+                self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
+                self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
+                self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
+                self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
+                self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
+                self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
+            elif 'ExpD3' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            elif 'DDPG' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            elif 'SAC' in args.policy:
+                # TODO: Implement SAC model loading
+                pass
+            else:
+                raise NotImplementedError("Policy {} not implemented".format(args.policy))
+        
+            print("Model loaded successfully")
 
     def yaw_from_quaternion(self, q):
         x, y, z, w = q
@@ -47,23 +134,23 @@ class RealEnv(GazeboEnv):
 
         return np.arctan2(siny_cosp, cosy_cosp)
     
-    def homogeneous_transfomration(self, vector):
+    def homogeneous_transfomration(self, v):
+        '''Homogeneous transformation of x,y position'''
         H = np.array([[0, 1, 0],
                       [-1, 0, -1],
                       [0, 0, 1]])
 
 
-        vec_hom = np.append(vector, 1)
+        vec_hom = np.append(v, 1)
         transformed_vec = H @ vec_hom
 
         return transformed_vec[0], transformed_vec[1]
 
-    """def odom(self):
+    def odom(self):
         '''Extract state information from odometry message'''
         # Robot position
         x = self.msg.pose.pose.position.x
         y = self.msg.pose.pose.position.y
-        self.x, self.y = x, y
         # Get orientation
         quaternion = (
             self.msg.pose.pose.orientation.x,
@@ -74,7 +161,8 @@ class RealEnv(GazeboEnv):
         x , y = self.homogeneous_transfomration([x, y])
         yaw = self.yaw_from_quaternion(quaternion) + 2.8381249
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
-        self.theta = yaw
+
+        self.x, self.y, self.theta = x, y, yaw
         
         # Robot velocities
         linear_vel = self.msg.twist.twist.linear.x
@@ -91,23 +179,19 @@ class RealEnv(GazeboEnv):
         
         # Compute the angle from the robot to the goal
         goal_angle = np.arctan2(dy, dx)
-        
         # Compute the relative heading error (normalize to [-pi, pi])
         e_theta_g = (yaw - goal_angle + np.pi) % (2 * np.pi) - np.pi
-        
         # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
         v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle)
-        
         # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
         v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle)
-
         # Compute distance to obstacle (assuming obstacle is at the origin)
         d_obs = np.linalg.norm([x, y])
         
         # Create the processed state vector
-        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])"""
+        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
 
-    """def publish_velocity(self, action):
+    def publish_velocity(self, action):
         '''Publish velocity commands to the robot'''
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
@@ -119,19 +203,19 @@ class RealEnv(GazeboEnv):
         w_l = (v - w * d/2) / r
         vel_msg = Vector3(w_r, w_l, 0)
 
-        self.cmd_vel_pub.publish(vel_msg)"""
+        self.cmd_vel_pub.publish(vel_msg)
 
     def reset(self):
-        """Reset the environment"""
+        '''Stop an change the initial position of the robot'''
         self.publish_velocity([0, 0])
         rospy.sleep(0.5)
-        # Change initila position
+        # Change initial position
         r = np.sqrt(np.random.uniform(0,1))*0.1
         theta = np.random.uniform(0,2*np.pi)
         self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
     
     def train(self):
-        """Train function"""
+        '''Training function'''
         if self.count == 0:
             self.episode_time = rospy.get_time()
 
@@ -201,6 +285,7 @@ class RealEnv(GazeboEnv):
             self.come_flag = True
 
     def evaluate(self):
+        '''Evaluation function'''
         self.trajectory.append([self.x, self.y])
 
         if self.count == 0:
@@ -264,14 +349,14 @@ class RealEnv(GazeboEnv):
 
                 # Save buffer
                 with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
-                    pickle.dump(self.replay_buffer, f)
+                    pkl.dump(self.replay_buffer, f)
 
                 # Reset for next evaluation cycle
                 self.all_trajectories = []
                 self.epoch += 1
 
     def come(self):
-        """Come home function"""
+        '''Come state logic'''
         if self.rotation_flag:
             if self.stop_flag:
                 angle_to_goal = np.arctan2(self.GOAL[1] - self.y, self.GOAL[0] - self.x)
@@ -294,10 +379,10 @@ class RealEnv(GazeboEnv):
                     
                     # Special handling for initial positioning
                     if self.initial_positioning:
-                        # After initial positioning, start training
+                        # After initial positioning, start evaluation
                         self.initial_positioning = False
-                        self.train_flag = True
-                        self.evaluate_flag = False
+                        self.train_flag = False
+                        self.evaluate_flag = True
                         self.come_flag = False
                         return
                     
@@ -315,7 +400,7 @@ class RealEnv(GazeboEnv):
                     self.come_flag = False
 
         elif self.move_flag:
-            # Movement logic remains the same
+            # Movement logic
             distance = np.sqrt((self.HOME[0] - self.x) ** 2 + (self.HOME[1] - self.y) ** 2)
             angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
             angle_error = np.arctan2(np.sin(angle_to_goal - self.theta), np.cos(angle_to_goal - self.theta))
@@ -342,7 +427,8 @@ class RealEnv(GazeboEnv):
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
             return
-
+        
+        """State machine logic"""
         if self.come_flag:
             self.come()
         elif self.train_flag:
@@ -358,6 +444,7 @@ def main():
     os.makedirs(f"./runs/replay_buffers/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
     
     RealEnv(args, kwargs)
     rospy.spin()

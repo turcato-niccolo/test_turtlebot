@@ -1,5 +1,6 @@
-import rospy
+import pickle as pkl
 import numpy as np
+import rospy
 import os
 
 from algorithms import ExpD3
@@ -9,7 +10,7 @@ from algorithms import SAC
 
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
-from geometry_msgs.msg import Pose, Twist
+from geometry_msgs.msg import Twist
 from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState
 import tf.transformations
@@ -79,7 +80,7 @@ class GazeboEnv:
         print("ENV INIT...")
 
     def _initialize_rl(self, args, kwargs):
-
+        '''Initialize the RL algorithm'''
         state_dim = 6
         self.action_dim = 2
         buffer_size = int(1e5)
@@ -96,6 +97,7 @@ class GazeboEnv:
             raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
         self.replay_buffer = ReplayBuffer(state_dim, self.action_dim, buffer_size)
+        self.load_model(args)
 
     def _init_parameters(self, args):
         # Parameters
@@ -134,6 +136,36 @@ class GazeboEnv:
 
         self.move_flag = False
         self.rotation_flag = True
+
+    def load_model(self, args):
+        '''Load a pre-trained model'''
+        if args.load_model:
+            # If the user typed "default", use a predefined file name
+            if args.load_model == "default":
+                file_to_load = "file_name"
+            else:
+                file_to_load = args.load_model
+                self.epoch = int(file_to_load.split("/")[-1])
+
+                if self.epoch != 0:
+                    self.evaluations_reward = np.load(f"./runs/results/{args.policy}/evaluations_reward_seed{args.seed}.npy").tolist()
+                    self.evaluations_suc = np.load(f"./runs/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
+
+            self.policy.load(file_to_load)
+        else:
+            pass
+
+        print(f"Model loaded: {file_to_load}")
+
+    def save_model_params(self):
+        actor_params = self.policy.actor.parameters()
+        critic_params = self.policy.critic.parameters()
+        
+        p_actor = [l.cpu().detach().numpy() for l in actor_params]
+        p_critic = [l.cpu().detach().numpy() for l in critic_params]   
+        
+        pkl.dump(p_actor, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'wb'))
+        pkl.dump(p_critic, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'wb'))
 
     def set_position(self):
         rospy.wait_for_service('/gazebo/set_model_state')
@@ -420,48 +452,7 @@ class GazeboEnv:
 
     def come(self):
         # TODO: Implement come logic here
-        vel_msg = Twist()
-
-        if self.rotation_flag:
-            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
-            
-            if abs(angle_to_goal - self.theta) > 0.05:
-                angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
-                vel_msg.linear.x = 0.0
-                vel_msg.angular.z = angular_speed
-                self.cmd_vel_pub.publish(vel_msg)
-            else:
-                vel_msg.angular.z = 0.0
-                self.move_flag = True
-                self.rotation_flag = False
-
-        elif self.move_flag:
-            # Compute distance and angle to the goal
-            distance = np.sqrt((self.goal_x - self.x) ** 2 + (self.goal_y - self.y) ** 2)
-            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
-                
-            # Proportional controller with increased speed
-            linear_speed = min(0.5 * distance, 0.5)  # Increased max speed
-            angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)  # Increased max angular speed
-                
-            if distance < 0.05:  # Stop condition
-                vel_msg.linear.x = 0.0
-                vel_msg.angular.z = 0.0
-                self.cmd_vel_pub.publish(vel_msg)
-
-                self.rotation_flag = True
-                self.move_flag_flag = False
-
-                self.train_flag = True
-                self.evaluate_flag = False
-                self.come_flag = False
-            else:
-                vel_msg.linear.x = linear_speed
-                vel_msg.angular.z = angular_speed
-                
-            self.cmd_vel_pub.publish(vel_msg)
-        else:
-            pass
+        pass
 
 # TODO: Metriche da aggiungere:
 # TODO: Tempo medio necessario per arrivare al target (capire cosa sommare se non lo si raggiunge)
@@ -478,6 +469,7 @@ def main():
     os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
     
     GazeboEnv(args, kwargs)
     rospy.spin()
