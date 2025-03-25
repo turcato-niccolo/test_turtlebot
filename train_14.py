@@ -90,6 +90,8 @@ class RealEnv():
 
     def _init_parameters(self, args):
         # Parameters
+        self.dt = 1 / 100
+
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
@@ -312,6 +314,7 @@ class RealEnv():
             distance = self.old_state[0]
             delta_d = distance - next_distance
             reward = 2 if delta_d > 0.01 else -1
+            #reward = 5 * (delta_d / self.dt)
         else:
             reward = 0
         
@@ -333,17 +336,20 @@ class RealEnv():
         self.publish_velocity(a_in)
 
         if self.timestep > 1e3:
+            train_time = rospy.get_time()
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
+            train_time = rospy.get_time() - train_time
+            self.dt = 1 / train_time
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
 
-        elapsed_time = rospy.get_time() - self.episode_time
+        '''elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True
+            done = True'''
         
-        """if self.count > self.max_count:
-            done = True"""
+        if self.count > 500:
+            done = True
 
         if self.old_state is not None:
             self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
@@ -357,7 +363,7 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
+            print(f"Episode:{self.episode_num} Reward:{self.episode_reward:.1f} Steps:{self.episode_timesteps} Target:{target} Expl Noise: {self.expl_noise:.3f} Time:{self.episode_time:.1f} s dt: {self.dt}")
             
             if self.expl_noise > 0.05:
                 self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 300)
@@ -383,6 +389,7 @@ class RealEnv():
                 self.avrg_reward = 0
                 self.suc = 0
                 self.col = 0
+                self.dt = 1 / 100
             
             # Increment episode number
             self.episode_num += 1
@@ -405,12 +412,12 @@ class RealEnv():
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
 
-        elapsed_time = rospy.get_time() - self.episode_time
+        '''elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True
+            done = True'''
         
-        """if self.count > self.max_count:
-            done = True"""
+        if self.count > 1000:
+            done = True
 
         self.count += 1
         self.old_state = None if done else self.state
@@ -488,8 +495,8 @@ class RealEnv():
                     if self.initial_positioning:
                         # After initial positioning, start evaluation
                         self.initial_positioning = False
-                        self.train_flag = True
-                        self.evaluate_flag = False
+                        self.train_flag = False
+                        self.evaluate_flag = True
                         self.come_flag = False
                         return
                     
@@ -542,6 +549,7 @@ class RealEnv():
             self.train()
         elif self.evaluate_flag:
             self.evaluate()
+            rospy.sleep(self.TIME_DELTA)
 
 def main():
     print("\nRUNNING MAIN...")

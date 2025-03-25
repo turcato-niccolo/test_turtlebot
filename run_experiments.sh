@@ -5,10 +5,10 @@ python3 train_14.py \
     --policy TD3 \
     --hidden_size 64 \
     --batch_size 128 \
-    --seed 0 \
+    --seed 2 \
     --expl_noise 0.2 \
-    --load_model "" \
-    --lr 3e-4
+    --load_model "default" \
+    --lr 1e-4
 
 : << 'COMMENT'
 
