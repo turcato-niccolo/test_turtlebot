@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-python3 converter.py \
+python3 train_13.py \
     --policy TD3 \
     --hidden_size 64 \
     --batch_size 128 \

@@ -1,0 +1,454 @@
+from geometry_msgs.msg import Vector3
+from nav_msgs.msg import Odometry
+import numpy as np
+import pickle as pkl
+import torch
+import rospy
+import os
+
+from algorithms import ExpD3
+from algorithms import OurDDPG
+from algorithms import TD3
+from algorithms import SAC
+
+from utils import ReplayBuffer
+from config import parse_args
+from train import GazeboEnv
+
+class RealEnv(GazeboEnv):
+
+    def _initialize_ros(self):
+        # Initialize ROS node and publishers
+        rospy.init_node('robot_trainer', anonymous=True)                                        # Initialize ROS node
+        self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)   # Initialize velocity publisher
+        # Initialize odometry subscriber
+        rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)           # Initialize odometry subscriber
+        rospy.loginfo("ROS initialization completed")
+        self.reset()
+        
+        print("ROS NODE INIT...")
+    
+    def _initialize_rl(self, args, kwargs):
+        '''Initialize the RL algorithm'''
+        state_dim = 6
+        self.action_dim = 2
+        buffer_size = int(1e5)
+
+        if 'DDPG' in args.policy:
+            self.policy = OurDDPG(**kwargs)
+        elif 'TD3' in args.policy:
+            self.policy = TD3(**kwargs)
+        elif 'SAC' in args.policy:
+            self.policy = SAC(**kwargs)
+        elif 'ExpD3' in args.policy:
+            self.policy = ExpD3(**kwargs)
+        else:
+            raise NotImplementedError("Policy {} not implemented".format(args.policy))
+        
+        self.replay_buffer = ReplayBuffer(state_dim, self.action_dim, buffer_size)
+        self.load_model_params(args)
+
+    def _init_parameters(self, args):
+        super()._init_parameters(args)
+        # Initialize flags for state management
+        self.train_flag = False
+        self.evaluate_flag = False
+        self.stop_flag = False
+        self.come_flag = True
+        self.move_flag = False
+        self.rotation_flag = True
+        self.initial_positioning = True
+        # Episode counters
+        self.episode_num = 1  # Start from 1
+        self.e = 1  # Evaluation counter
+        self.eval_ep = 5  # Number of evaluation episodes
+
+    def load_model_params(self, args):
+        '''Load model parameters from file'''
+        if args.load_model:
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'rb')) 
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'rb'))
+
+            if 'TD3' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+                self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
+                self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
+                self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
+                self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
+                self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
+                self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
+            elif 'ExpD3' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            elif 'DDPG' in args.policy:
+                #Actor
+                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
+                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
+                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
+                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
+                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
+                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
+                #Critic
+                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
+                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
+                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
+                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
+                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
+                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            elif 'SAC' in args.policy:
+                # TODO: Implement SAC model loading
+                pass
+            else:
+                raise NotImplementedError("Policy {} not implemented".format(args.policy))
+        
+            print("Model loaded successfully")
+
+    def yaw_from_quaternion(self, q):
+        x, y, z, w = q
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+
+        return np.arctan2(siny_cosp, cosy_cosp)
+    
+    def homogeneous_transfomration(self, v):
+        '''Homogeneous transformation of x,y position'''
+        H = np.array([[0, 1, 0],
+                      [-1, 0, -1],
+                      [0, 0, 1]])
+
+
+        vec_hom = np.append(v, 1)
+        transformed_vec = H @ vec_hom
+
+        return transformed_vec[0], transformed_vec[1]
+
+    def odom(self):
+        '''Extract state information from odometry message'''
+        # Robot position
+        x = self.msg.pose.pose.position.x
+        y = self.msg.pose.pose.position.y
+        # Get orientation
+        quaternion = (
+            self.msg.pose.pose.orientation.x,
+            self.msg.pose.pose.orientation.y,
+            self.msg.pose.pose.orientation.z,
+            self.msg.pose.pose.orientation.w
+        )
+        x , y = self.homogeneous_transfomration([x, y])
+        yaw = self.yaw_from_quaternion(quaternion) + 2.8381249
+        yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
+
+        self.x, self.y, self.theta = x, y, yaw
+        
+        # Robot velocities
+        linear_vel = self.msg.twist.twist.linear.x
+        vel_x = linear_vel * np.cos(yaw)
+        vel_y = linear_vel * np.sin(yaw)
+        angular_vel = self.msg.twist.twist.angular.z
+        
+        #self.state = np.array([x, y, yaw, vel_x, vel_y, angular_vel])
+
+        # Compute distance to goal
+        dx = self.GOAL[0] - x
+        dy = self.GOAL[1] - y
+        distance = np.linalg.norm([dx, dy])
+        
+        # Compute the angle from the robot to the goal
+        goal_angle = np.arctan2(dy, dx)
+        # Compute the relative heading error (normalize to [-pi, pi])
+        e_theta_g = (yaw - goal_angle + np.pi) % (2 * np.pi) - np.pi
+        # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
+        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle)
+        # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
+        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle)
+        # Compute distance to obstacle (assuming obstacle is at the origin)
+        d_obs = np.linalg.norm([x, y])
+        
+        # Create the processed state vector
+        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
+
+    def publish_velocity(self, action):
+        '''Publish velocity commands to the robot'''
+        v = action[0] * self.MAX_VEL[0]
+        w = action[1] * self.MAX_VEL[1]
+        
+        d = 0.173
+        r = 0.0325
+
+        w_r = (v + w * d/2) / r
+        w_l = (v - w * d/2) / r
+        vel_msg = Vector3(w_r, w_l, 0)
+
+        self.cmd_vel_pub.publish(vel_msg)
+
+    def reset(self):
+        '''Stop an change the initial position of the robot'''
+        self.publish_velocity([0, 0])
+        rospy.sleep(0.5)
+        # Change initial position
+        r = np.sqrt(np.random.uniform(0,1))*0.1
+        theta = np.random.uniform(0,2*np.pi)
+        self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
+    
+    def train(self):
+        '''Training function'''
+        if self.count == 0:
+            self.episode_time = rospy.get_time()
+
+        if self.timestep > 1e3:
+            action = self.policy.select_action(self.state)
+            action = (action + np.random.normal(0, self.expl_noise, size=self.action_dim)
+                        ).clip(-self.max_action, self.max_action)
+        else:
+            action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
+
+        a_in = [(action[0] + 1 ) / 2, action[1]]
+        self.publish_velocity(a_in)
+
+        if self.timestep > 1e3:
+            self.policy.train(self.replay_buffer, batch_size=self.batch_size)
+            rospy.sleep(self.TIME_DELTA)
+
+        reward, done, target = self.get_reward()
+        self.episode_reward += reward
+
+        '''elapsed_time = rospy.get_time() - self.episode_time
+        if elapsed_time > self.max_time:
+            done = True'''
+        
+        if self.count > self.max_count:
+            done = True
+
+        if self.old_state is not None:
+            self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
+
+        # Update state and action
+        self.old_state = None if done else self.state
+        self.old_action = None if done else action
+        self.episode_timesteps += 1
+        self.timestep += 1
+        self.count += 1
+
+        if done:
+            self.episode_time = rospy.get_time() - self.episode_time
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
+            
+            if self.expl_noise > 0.1:
+                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+
+            # Reset episode variables
+            self.episode_reward = 0
+            self.episode_timesteps = 0
+            self.count = 0
+            self.reset()
+
+            # Check if it's time for evaluation (after this episode)
+            if self.episode_num % self.eval_freq == 0:
+                print("-" * 80)
+                print(f"VALIDATING - EPOCH {self.epoch + 1}")
+                print("-" * 80)
+                # Reset evaluation counters
+                self.e = 1  # Start evaluation counter from 1
+                self.avrg_reward = 0
+                self.suc = 0
+                self.col = 0
+            
+            # Increment episode number
+            self.episode_num += 1
+            
+            # Reset flags for come state
+            self.train_flag = False
+            self.come_flag = True
+
+    def evaluate(self):
+        '''Evaluation function'''
+        self.trajectory.append([self.x, self.y])
+
+        if self.count == 0:
+            self.episode_time = rospy.get_time()
+
+        action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
+        a_in = [(action[0] + 1 ) / 2, action[1]]
+        self.publish_velocity(a_in)
+
+        reward, done, target = self.get_reward()
+        self.avrg_reward += reward
+
+        '''elapsed_time = rospy.get_time() - self.episode_time
+        if elapsed_time > self.max_time:
+            done = True'''
+        
+        if self.count > self.max_count:
+            done = True
+
+        self.count += 1
+        self.old_state = None if done else self.state
+        self.old_action = None if done else action
+
+        if done:
+            self.suc += int(target)
+            self.col += int(not target)
+            self.episode_time = rospy.get_time() - self.episode_time
+            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            
+            self.all_trajectories.append(np.array(self.trajectory))
+            self.trajectory = []
+            
+            # Increment evaluation counter
+            self.e += 1
+            self.count = 0
+            
+            # Reset flags for come state
+            self.evaluate_flag = False
+            self.come_flag = True
+            self.reset()
+
+            # Check if we've completed all evaluation episodes
+            if self.e > self.eval_ep:  # Use > instead of >= since we already incremented
+                # Process and save evaluation results
+                self.avrg_reward /= self.eval_ep
+                avrg_col = self.col / self.eval_ep
+                avrg_suc = self.suc / self.eval_ep
+
+                print("-" * 50)
+                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
+                print("-" * 50)
+
+                # Save evaluation results
+                self.evaluations_reward.append(self.avrg_reward)
+                self.evaluations_suc.append(avrg_suc)
+                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", 
+                        **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
+                np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
+                np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
+                self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
+
+                # Save buffer
+                with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
+                    pkl.dump(self.replay_buffer, f)
+
+                # Reset for next evaluation cycle
+                self.all_trajectories = []
+                self.epoch += 1
+
+    def come(self):
+        '''Come state logic'''
+        if self.rotation_flag:
+            if self.stop_flag:
+                angle_to_goal = np.arctan2(self.GOAL[1] - self.y, self.GOAL[0] - self.x)
+            else:
+                angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
+            
+            if abs(angle_to_goal - self.theta) > 0.05:
+                angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
+                self.publish_velocity([0, angular_speed])
+            else:
+                self.publish_velocity([0, 0])
+                self.move_flag = True
+                self.rotation_flag = False
+
+                if self.stop_flag:
+                    # Robot has arrived at destination after moving
+                    self.move_flag = False
+                    self.rotation_flag = True
+                    self.stop_flag = False
+                    
+                    # Special handling for initial positioning
+                    if self.initial_positioning:
+                        # After initial positioning, start evaluation
+                        self.initial_positioning = False
+                        self.train_flag = False
+                        self.evaluate_flag = True
+                        self.come_flag = False
+                        return
+                    
+                    # Normal operation - decide next state
+                    if (self.episode_num - 1) % self.eval_freq == 0 and self.e <= self.eval_ep:
+                        # Time for evaluation (or continuing evaluation)
+                        self.evaluate_flag = True
+                        self.train_flag = False
+                    else:
+                        # Time for training
+                        self.train_flag = True
+                        self.evaluate_flag = False
+                    
+                    # Exit come state
+                    self.come_flag = False
+
+        elif self.move_flag:
+            # Movement logic
+            distance = np.sqrt((self.HOME[0] - self.x) ** 2 + (self.HOME[1] - self.y) ** 2)
+            angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
+            angle_error = np.arctan2(np.sin(angle_to_goal - self.theta), np.cos(angle_to_goal - self.theta))
+
+            linear_speed = min(0.5 * distance, 0.5)
+            angular_speed = np.clip(1.0 * angle_error, -1.0, 1.0)
+                
+            if distance < 0.05:  # Stop condition
+                self.publish_velocity([0, 0])
+                self.move_flag = False
+                self.rotation_flag = True
+                self.stop_flag = True
+            else:
+                self.publish_velocity([linear_speed, angular_speed])
+
+    def callback(self, msg):
+        # Update the state
+        self.msg = msg
+        self.odom()
+
+        # Check if we have exceeded the maximum number of episodes
+        if self.episode_num > self.max_episode + 1:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+        
+        """State machine logic"""
+        if self.come_flag:
+            self.come()
+        elif self.train_flag:
+            self.train()
+        elif self.evaluate_flag:
+            self.evaluate()
+
+def main():
+    print("\nRUNNING MAIN...")
+    args, kwargs = parse_args()
+    
+    os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs/replay_buffers/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
+    
+    RealEnv(args, kwargs)
+    rospy.spin()
+
+if __name__ == "__main__":
+    main()
