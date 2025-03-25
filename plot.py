@@ -490,7 +490,7 @@ def plot_subplots(algorithm):
     axes[0].set_title(f"{algorithm} - Average Reward (with std dev)")
     axes[0].set_xlabel("Evaluation Episode")
     axes[0].set_ylabel("Average Reward")
-    axes[0].set_ylim(-130, 180)
+    #axes[0].set_ylim(-130, 180)
     axes[0].grid(True, linestyle='--', alpha=0.7)
     axes[0].legend()
     
@@ -559,7 +559,7 @@ def plot_comparison(algorithms):
     axes[0].set_title("Average Reward Comparison")
     axes[0].set_xlabel("Evaluation Episode")
     axes[0].set_ylabel("Average Reward")
-    axes[0].set_ylim(-100, 180)
+    #axes[0].set_ylim(-100, 180)
     axes[0].grid(True, linestyle='--', alpha=0.7)
     axes[0].legend()
     
