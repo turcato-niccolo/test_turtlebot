@@ -228,7 +228,7 @@ class RealEnv():
 
         self.x, self.y, self.theta = x, y, yaw
 
-        print(f"x : {self.x:.2f}, y: {self.y:.2f}, yaw: {self.theta:.2f}")
+        #print(f"x : {self.x:.2f}, y: {self.y:.2f}, yaw: {self.theta:.2f}")
         
         # Robot velocities
         linear_vel = self.msg.twist.twist.linear.x
@@ -293,17 +293,17 @@ class RealEnv():
         
         # Check if the goal is reached
         if next_distance < goal_threshold:
-            #print("WIN")
+            print("WIN")
             return goal_reward, True, True
         
         # Check boundary violation:
         if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
-            #print("DANGER ZONE")
+            print("DANGER ZONE")
             return boundary_penalty, True, False
         
         # Check collision with obstacle:
         if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
-            #print("COLLISION")
+            print("COLLISION")
             return collision_penalty, True, False
         
         if self.old_state is not None:
