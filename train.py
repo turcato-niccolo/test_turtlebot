@@ -102,6 +102,7 @@ class GazeboEnv:
     def _init_parameters(self, args):
         # Parameters
         self.args = args
+        self.dt = 1 / 30
 
         self.max_action = float(1)
         self.batch_size = args.batch_size
@@ -307,26 +308,6 @@ class GazeboEnv:
         
         return reward, False, False
 
-    def callback(self, msg):
-        
-        # Update the state
-        self.msg = msg
-        self.odom()
-
-        # Check if we have exceeded the maximum number of episodes
-        if self.episode_num > self.max_episode + 1:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            rospy.signal_shutdown("EXITING. GOODBYE!")
-            return
-
-        if self.train_flag:
-            self.train()
-        elif self.evaluate_flag:
-            self.evaluate()
-        else:
-            self.come()
-
     def train(self):
 
         if self.count == 0:
@@ -344,6 +325,8 @@ class GazeboEnv:
 
         if self.timestep > 1e3:
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
+            rospy.sleep(self.TIME_DELTA)
+        else:
             rospy.sleep(self.TIME_DELTA)
 
         reward, done, target = self.get_reward()
@@ -454,6 +437,28 @@ class GazeboEnv:
         # TODO: Implement come logic here
         pass
 
+    def callback(self, msg):
+        # Update the state
+        self.msg = msg
+        self.odom()
+
+        # Check if we have exceeded the maximum number of episodes
+        if self.episode_num > self.max_episode + 1:
+            print("EXITING. GOODBYE!")
+            self.publish_velocity([0.0, 0.0])
+            rospy.signal_shutdown("EXITING. GOODBYE!")
+            return
+        
+        """State machine logic"""
+        if self.come_flag:
+            self.come()
+        elif self.train_flag:
+            self.train()
+        elif self.evaluate_flag:
+            self.evaluate()
+            rospy.sleep(self.TIME_DELTA)
+
+            
 # TODO: Metriche da aggiungere:
 # TODO: Tempo medio necessario per arrivare al target (capire cosa sommare se non lo si raggiunge)
 # TODO: Traiettoria (anche il rapporto tra la lunghezza minima = 2 e quella fatta dal robot)
