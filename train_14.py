@@ -11,7 +11,7 @@ from algorithms import OurDDPG
 from algorithms import TD3
 from algorithms import SAC
 
-from utils import ReplayBuffer
+from utils import ReplayBuffer, customBox
 from config import parse_args
 
 class RealEnv():
@@ -126,9 +126,9 @@ class RealEnv():
         self.rotation_flag = True
         self.initial_positioning = True
         # Episode counters
-        self.episode_num = 1  # Start from 1
-        self.e = 1  # Evaluation counter
-        self.eval_ep = 5  # Number of evaluation episodes
+        self.episode_num = 1    # Start from 1
+        self.e = 1              # Evaluation counter
+        self.eval_ep = 5        # Number of evaluation episodes
 
     def load_model_params(self, args):
         '''Load model parameters from file'''
@@ -366,7 +366,6 @@ class RealEnv():
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
-            
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
             
@@ -434,11 +433,9 @@ class RealEnv():
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
             
-            # Increment evaluation counter
             self.e += 1
             self.count = 0
             
-            # Reset flags for come state
             self.evaluate_flag = False
             self.come_flag = True
             self.reset()
@@ -451,7 +448,7 @@ class RealEnv():
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} %")
                 print("-" * 50)
 
                 # Save evaluation results
@@ -461,6 +458,7 @@ class RealEnv():
                         **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
+                # Save model
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
                 # Save buffer

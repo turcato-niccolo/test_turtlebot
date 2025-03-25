@@ -1,7 +1,7 @@
 import argparse
 import torch
 import numpy as np
-#from gym import spaces
+from utils import CustomBox
 
 def parse_args():
     
@@ -43,9 +43,10 @@ def parse_args():
     action_dim = 2
 
     # Define the action bounds
-    action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
+    '''action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = None #spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)'''
+    action_space = CustomBox(low=[-1, -1], high=[1, 1])
     max_action = float(1)
 
     if args.policy == "SAC":

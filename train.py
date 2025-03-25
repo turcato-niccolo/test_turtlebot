@@ -122,6 +122,8 @@ class GazeboEnv:
         self.episode_timesteps = 0
         self.count = 0
 
+        self.training_reward = []
+        self.training_suc = []
         self.evaluations_reward = []
         self.evaluations_suc = []
         self.all_trajectories = []
@@ -354,6 +356,12 @@ class GazeboEnv:
             self.reset()
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+
+            # Save training data
+            self.training_reward.append(self.episode_reward)
+            self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
+            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
 
             self.episode_reward = 0
             self.episode_timesteps = 0
