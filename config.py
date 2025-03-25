@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--critic_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--OVER", default=2, type=float)
     parser.add_argument("--UNDER", default=0.5, type=float)
+    parser.add_argument("--lr", default=3e-4, type=float)
     args = parser.parse_args()
 
     #file_name = f"{args.policy}_{args.hidden_size}_{args.batch_size}_{args.seed}"
@@ -44,7 +45,7 @@ def parse_args():
     # Define the action bounds
     action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
-    action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = None #spaces.Box(low=action_low, high=action_high, dtype=np.float32)
     max_action = float(1)
 
     if args.policy == "SAC":
@@ -58,7 +59,7 @@ def parse_args():
 			"target_update_interval": 2,          	# Frequency of target network updates
 			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
 			"hidden_size": args.hidden_size,        # Size of hidden layers
-			"lr": 3e-4                            	# Learning rate
+			"lr": args.lr                           # Learning rate
 		}
     else:
         kwargs = {
@@ -85,7 +86,8 @@ def parse_args():
             "critic_estimations": args.critic_estimations,
             "OVER": args.OVER,
             "UNDER": args.UNDER,
-            "rect_action_flag": False
+            "rect_action_flag": False,
+            "lr": args.lr
         }
     
     print("-" * 80)
