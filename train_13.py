@@ -189,7 +189,7 @@ class RealEnv():
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
-            print(f"Model loaded successfully at: ./runs/models_params/{self.args.policy}/seed{self.args.seed}/")
+            print(f"Model loaded successfully from: ./runs/models_params/{self.args.policy}/seed{self.args.seed}/")
 
     def yaw_from_quaternion(self, q):
         x, y, z, w = q

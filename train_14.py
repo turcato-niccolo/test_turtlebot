@@ -193,7 +193,7 @@ class RealEnv():
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
-            print("Model loaded successfully")
+            print(f"Model loaded successfully from: ./runs/models_params/{self.args.policy}/seed{self.args.seed}/")
 
     def yaw_from_quaternion(self, q):
         x, y, z, w = q
@@ -340,6 +340,8 @@ class RealEnv():
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
             train_time = rospy.get_time() - train_time
             self.dt = train_time
+        else:
+            rospy.sleep(self.TIME_DELTA)
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
@@ -348,7 +350,7 @@ class RealEnv():
         if elapsed_time > self.max_time:
             done = True'''
         
-        if self.count > 1e3:
+        if self.count > self.max_count:
             done = True
 
         if self.old_state is not None:
@@ -363,7 +365,7 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time:{self.episode_time:.1f} s  - f: {1/self.dt:.2f}")
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
             
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
@@ -416,7 +418,7 @@ class RealEnv():
         if elapsed_time > self.max_time:
             done = True'''
         
-        if self.count > 1000:
+        if self.count > self.max_count:
             done = True
 
         self.count += 1
