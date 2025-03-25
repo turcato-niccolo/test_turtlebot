@@ -201,7 +201,7 @@ class RealEnv():
     def homogeneous_transfomration(self, v):
         '''Homogeneous transformation of x,y position'''
         H = np.array([[0, 1, 0],
-                      [-1, 0, -1],
+                      [-1, 0, 1],
                       [0, 0, 1]])
 
 
@@ -529,7 +529,6 @@ class RealEnv():
         """State machine logic"""
         if self.come_flag:
             self.come()
-            print("coming")
         elif self.train_flag:
             self.train()
         elif self.evaluate_flag:
