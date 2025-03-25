@@ -293,17 +293,17 @@ class RealEnv():
         
         # Check if the goal is reached
         if next_distance < goal_threshold:
-            print("WIN")
+            #print("WIN")
             return goal_reward, True, True
         
         # Check boundary violation:
         if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
-            print("DANGER ZONE")
+            #print("DANGER ZONE")
             return boundary_penalty, True, False
         
         # Check collision with obstacle:
         if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
-            print("COLLISION")
+            #print("COLLISION")
             return collision_penalty, True, False
         
         if self.old_state is not None:
@@ -481,8 +481,8 @@ class RealEnv():
                     if self.initial_positioning:
                         # After initial positioning, start evaluation
                         self.initial_positioning = False
-                        self.train_flag = False
-                        self.evaluate_flag = True
+                        self.train_flag = True
+                        self.evaluate_flag = False
                         self.come_flag = False
                         return
                     
