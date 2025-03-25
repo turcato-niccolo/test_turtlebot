@@ -6,7 +6,7 @@ python3 train_14.py \
     --hidden_size 64 \
     --batch_size 128 \
     --seed 2 \
-    --expl_noise 0.2 \
+    --expl_noise 0.1 \
     --load_model "default" \
     --lr 1e-4
 
