@@ -24,8 +24,9 @@ class RealEnv(GazeboEnv):
         # Initialize odometry subscriber
         rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)           # Initialize odometry subscriber
         rospy.loginfo("ROS initialization completed")
-
-        print("ENV INIT...")
+        self.reset()
+        
+        print("ROS NODE INIT...")
     
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''

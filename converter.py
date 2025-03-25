@@ -46,7 +46,8 @@ class GazeboEnv:
             self.TIME_DELTA = 1/8
         else:
             pass
-
+        
+        self.args = args
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
 
@@ -128,7 +129,7 @@ class GazeboEnv:
         print(f"Model loaded: {file_to_load}")
 
     def save_model_params(self):
-        actor_params = self.policy.actor.parameters()
+        actor_params = self.policy.actor.parameters() if self.args.policy != 'SAC' else self.policy.policy.parameters()
         critic_params = self.policy.critic.parameters()
         
         p_actor = [l.cpu().detach().numpy() for l in actor_params]
