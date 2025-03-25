@@ -11,7 +11,7 @@ from algorithms import OurDDPG
 from algorithms import TD3
 from algorithms import SAC
 
-from utils import ReplayBuffer, customBox
+from utils import ReplayBuffer
 from config import parse_args
 
 class RealEnv():

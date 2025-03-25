@@ -404,7 +404,7 @@ class GazeboEnv:
             self.suc += int(target)      # Increment suc if target is True (1)
             self.col += int(not target)  # Increment col if target is False (0)
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
             
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
