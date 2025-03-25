@@ -64,7 +64,6 @@ class RealEnv():
         self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)   # Initialize velocity publisher
         # Initialize odometry subscriber
         rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)           # Initialize odometry subscriber
-        rospy.loginfo("ROS initialization completed")
         self.reset()
         
         print("ROS NODE INIT...")
@@ -331,7 +330,6 @@ class RealEnv():
 
         if self.timestep > 1e3:
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
-            rospy.sleep(self.TIME_DELTA)
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
