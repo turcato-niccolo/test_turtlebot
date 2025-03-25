@@ -357,8 +357,13 @@ class RealEnv():
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
             
-            if self.expl_noise > 0.1:
-                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+            if self.expl_noise > 0.05:
+                self.expl_noise = self.expl_noise - ((0.2 - 0.05) / 300)
+            
+            self.training_reward.append(self.episode_reward)
+            self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
+            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
 
             # Reset episode variables
             self.episode_reward = 0
