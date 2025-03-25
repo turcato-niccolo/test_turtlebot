@@ -529,6 +529,7 @@ class RealEnv():
         """State machine logic"""
         if self.come_flag:
             self.come()
+            print("coming")
         elif self.train_flag:
             self.train()
         elif self.evaluate_flag:
