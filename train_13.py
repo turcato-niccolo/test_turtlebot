@@ -13,9 +13,50 @@ from algorithms import SAC
 
 from utils import ReplayBuffer
 from config import parse_args
-from train import GazeboEnv
 
-class RealEnv(GazeboEnv):
+class RealEnv():
+    def __init__(self, args, kwargs):
+
+        self.state = None
+        self.old_state = None
+        self.old_action = None
+        self.x, self.y, self.theta = -1, 0, 0
+
+        self.MAX_VEL = [0.5, np.pi/4]
+
+        # Environment parameters
+        self.GOAL = np.array([1.0, 0.0])
+        self.OBSTACLE = np.array([0.0, 0.0])
+        self.WALL_DIST = 1.0
+        self.GOAL_DIST = 0.15
+        self.OBST_W = 0.5
+        self.OBST_D = 0.2
+        self.HOME = np.array([-1, 0.0])
+
+        # Reward parameters
+        self.DISTANCE_PENALTY = 0.5
+        self.GOAL_REWARD = 1000
+        self.OBSTACLE_PENALTY = 100
+        self.MOVEMENT_PENALTY = 1
+        self.GAUSSIAN_REWARD_SCALE = 2
+        
+        if 'DDPG' in args.policy:
+            self.TIME_DELTA = 1/5.8
+        elif 'TD3' in args.policy:
+            self.TIME_DELTA = 1/5.9
+        elif 'SAC' in args.policy:
+            self.TIME_DELTA = 1/5.9
+        elif 'ExpD3' in args.policy:
+            self.TIME_DELTA = 1/8
+        else:
+            pass
+        
+        self.args = args
+        self._initialize_rl(args, kwargs)
+        self._init_parameters(args)
+        self._initialize_ros()
+
+        print("START TRAINING...\n")
 
     def _initialize_ros(self):
         # Initialize ROS node and publishers
@@ -49,7 +90,30 @@ class RealEnv(GazeboEnv):
         self.load_model_params(args)
 
     def _init_parameters(self, args):
-        super()._init_parameters(args)
+        # Parameters
+        self.max_action = float(1)
+        self.batch_size = args.batch_size
+
+        self.max_time = 20
+        self.max_episode = 400
+        self.max_count = 150
+        self.expl_noise = args.expl_noise
+        self.eval_freq = 20
+
+        self.timestep = 0
+        self.epoch = 0
+        self.save_model = False
+        self.episode_reward = 0
+        self.episode_timesteps = 0
+        self.count = 0
+
+        self.evaluations_reward = []
+        self.evaluations_suc = []
+        self.all_trajectories = []
+        self.trajectory = []
+        self.avrg_reward = 0
+        self.suc = 0
+        self.col = 0
         # Initialize flags for state management
         self.train_flag = False
         self.evaluate_flag = False
@@ -215,6 +279,41 @@ class RealEnv(GazeboEnv):
         theta = np.random.uniform(0,2*np.pi)
         self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
     
+    def get_reward(self):
+
+        next_distance = self.state[0]
+        
+        goal_threshold = self.GOAL_DIST   # Distance below which the goal is considered reached (meters)
+        goal_reward = 100.0   # Reward bonus for reaching the goal
+        
+        # New penalty constants for abnormal events:
+        boundary_penalty = -25.0   # Penalty for leaving the allowed area
+        collision_penalty = -50.0 # Penalty for colliding with the obstacle
+        
+        # Check if the goal is reached
+        if next_distance < goal_threshold:
+            #print("WIN")
+            return goal_reward, True, True
+        
+        # Check boundary violation:
+        if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
+            #print("DANGER ZONE")
+            return boundary_penalty, True, False
+        
+        # Check collision with obstacle:
+        if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
+            #print("COLLISION")
+            return collision_penalty, True, False
+        
+        if self.old_state is not None:
+            distance = self.old_state[0]
+            delta_d = distance - next_distance
+            reward = 2 if delta_d > 0.01 else -1
+        else:
+            reward = 0
+        
+        return reward, False, False
+
     def train(self):
         '''Training function'''
         if self.count == 0:
