@@ -106,6 +106,8 @@ class RealEnv():
         self.episode_timesteps = 0
         self.count = 0
 
+        self.training_reward = []
+        self.training_suc = []
         self.evaluations_reward = []
         self.evaluations_suc = []
         self.all_trajectories = []
