@@ -130,8 +130,8 @@ class RealEnv():
     def load_model_params(self, args):
         '''Load model parameters from file'''
         if args.load_model:
-            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'rb')) 
-            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'rb'))
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb')) 
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_critic.pkl', 'rb'))
 
             if 'TD3' in args.policy:
                 #Actor
