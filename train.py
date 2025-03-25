@@ -153,10 +153,9 @@ class GazeboEnv:
                     self.evaluations_suc = np.load(f"./runs/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
 
             self.policy.load(file_to_load)
+            print(f"Model loaded: {file_to_load}")
         else:
             pass
-
-        print(f"Model loaded: {file_to_load}")
 
     def save_model_params(self):
         actor_params = self.policy.actor.parameters()
@@ -458,7 +457,7 @@ class GazeboEnv:
             self.evaluate()
             rospy.sleep(self.TIME_DELTA)
 
-            
+
 # TODO: Metriche da aggiungere:
 # TODO: Tempo medio necessario per arrivare al target (capire cosa sommare se non lo si raggiunge)
 # TODO: Traiettoria (anche il rapporto tra la lunghezza minima = 2 e quella fatta dal robot)
