@@ -198,7 +198,7 @@ class RealEnv():
 
         return np.arctan2(siny_cosp, cosy_cosp)
     
-    def homogeneous_transfomration(self, v):
+    def homogeneous_transformation(self, v):
         '''Homogeneous transformation of x,y position'''
         H = np.array([[0, 1, 0],
                       [-1, 0, 1],
@@ -222,11 +222,13 @@ class RealEnv():
             self.msg.pose.pose.orientation.z,
             self.msg.pose.pose.orientation.w
         )
-        x , y = self.homogeneous_transfomration([x, y])
+        x , y = self.homogeneous_transformation([x, y])
         yaw = self.yaw_from_quaternion(quaternion) + 2.8381249
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
 
         self.x, self.y, self.theta = x, y, yaw
+
+        print(f"x : {self.x:.2f}, y: {self.y:.2f}, yaw: {self.theta:.2f}")
         
         # Robot velocities
         linear_vel = self.msg.twist.twist.linear.x
