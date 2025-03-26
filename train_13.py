@@ -299,7 +299,8 @@ class RealEnv():
             train_time = rospy.get_time() - train_time
             self.dt = train_time
         else:
-            self.dt = rospy.sleep(self.TIME_DELTA)
+            rospy.sleep(self.TIME_DELTA)
+            self.dt = self.TIME_DELTA
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
