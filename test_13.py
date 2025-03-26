@@ -458,7 +458,7 @@ class RealEnv():
         self.odom()
 
         # Check if we have exceeded the maximum number of episodes
-        if self.episode_num > self.max_episode + 1:
+        if self.episode_num > self.max_episode:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
