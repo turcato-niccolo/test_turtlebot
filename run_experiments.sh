@@ -1,6 +1,24 @@
 #!/bin/bash
 
+python3 train_13.py \
+    --policy DDPG \
+    --hidden_size 64 \
+    --batch_size 128 \
+    --seed 0 \
+    --expl_noise 0.1 \
+    --load_model "default"
 
+: << 'COMMENT'
+
+python3 train_14.py \
+    --policy SAC \
+    --hidden_size 64 \
+    --batch_size 128 \
+    --seed 0 \
+    --expl_noise 0.1 \
+    --load_model "default"
+
+------------------------------------------------------------------------------
 algorithms=("SAC" "DDPG" "TD3")
 
 for algo in "${algorithms[@]}"; do
@@ -21,18 +39,8 @@ for algo in "${algorithms[@]}"; do
     done
 done
 
-: << 'COMMENT'
-
-python3 train_13.py \
-    --policy TD3 \
-    --hidden_size 64 \
-    --batch_size 128 \
-    --seed 0 \
-    --expl_noise 0.1 \
-    --load_model "default"
-
 ------------------------------------------------------------------------------
-algorithms=("DDPG" "TD3")
+algorithms=("DDPG" "TD3" "SAC")
 
 for algo in "${algorithms[@]}"; do
     for seed in {0..3}; do
