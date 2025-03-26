@@ -90,6 +90,8 @@ class RealEnv():
 
     def _init_parameters(self, args):
         # Parameters
+        self.dt = 1 / 100
+
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
@@ -106,6 +108,8 @@ class RealEnv():
         self.episode_timesteps = 0
         self.count = 0
 
+        self.training_reward = []
+        self.training_suc = []
         self.evaluations_reward = []
         self.evaluations_suc = []
         self.all_trajectories = []
@@ -122,9 +126,9 @@ class RealEnv():
         self.rotation_flag = True
         self.initial_positioning = True
         # Episode counters
-        self.episode_num = 1  # Start from 1
-        self.e = 1  # Evaluation counter
-        self.eval_ep = 5  # Number of evaluation episodes
+        self.episode_num = 1    # Start from 1
+        self.e = 1              # Evaluation counter
+        self.eval_ep = 5        # Number of evaluation episodes
 
     def load_model_params(self, args):
         '''Load model parameters from file'''
@@ -293,23 +297,24 @@ class RealEnv():
         
         # Check if the goal is reached
         if next_distance < goal_threshold:
-            print("WIN")
+            #print("WIN")
             return goal_reward, True, True
         
         # Check boundary violation:
         if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
-            print("DANGER ZONE")
+            #print("DANGER ZONE")
             return boundary_penalty, True, False
         
         # Check collision with obstacle:
         if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
-            print("COLLISION")
+            #print("COLLISION")
             return collision_penalty, True, False
         
         if self.old_state is not None:
             distance = self.old_state[0]
             delta_d = distance - next_distance
             reward = 2 if delta_d > 0.01 else -1
+            #reward = 5 * (delta_d / self.dt)
         else:
             reward = 0
         
@@ -331,7 +336,12 @@ class RealEnv():
         self.publish_velocity(a_in)
 
         if self.timestep > 1e3:
+            train_time = rospy.get_time()
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
+            train_time = rospy.get_time() - train_time
+            self.dt = train_time
+        else:
+            rospy.sleep(self.TIME_DELTA)
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
@@ -355,10 +365,14 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
-            
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+            
+            self.training_reward.append(self.episode_reward)
+            self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
+            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
 
             # Reset episode variables
             self.episode_reward = 0
@@ -376,6 +390,7 @@ class RealEnv():
                 self.avrg_reward = 0
                 self.suc = 0
                 self.col = 0
+                self.dt = 1 / 100
             
             # Increment episode number
             self.episode_num += 1
@@ -413,16 +428,14 @@ class RealEnv():
             self.suc += int(target)
             self.col += int(not target)
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
             
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
             
-            # Increment evaluation counter
             self.e += 1
             self.count = 0
             
-            # Reset flags for come state
             self.evaluate_flag = False
             self.come_flag = True
             self.reset()
@@ -435,7 +448,7 @@ class RealEnv():
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} %")
                 print("-" * 50)
 
                 # Save evaluation results
@@ -445,6 +458,7 @@ class RealEnv():
                         **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
+                # Save model
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
                 # Save buffer
@@ -535,6 +549,7 @@ class RealEnv():
             self.train()
         elif self.evaluate_flag:
             self.evaluate()
+            rospy.sleep(self.TIME_DELTA)
 
 def main():
     print("\nRUNNING MAIN...")

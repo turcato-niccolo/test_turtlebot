@@ -1,18 +1,7 @@
 #!/bin/bash
 
 
-python3 train_14.py \
-    --policy TD3 \
-    --hidden_size 64 \
-    --batch_size 128 \
-    --seed 2 \
-    --expl_noise 0.1 \
-    --load_model "default" \
-    --lr 1e-4
-
-: << 'COMMENT'
-
-algorithms=("DDPG" "TD3" "SAC")
+algorithms=("DDPG" "TD3")
 
 for algo in "${algorithms[@]}"; do
     for seed in {0..3}; do
@@ -22,7 +11,29 @@ for algo in "${algorithms[@]}"; do
             expl_noise=0.3
         fi
 
-        python3 train_custom.py \
+        python3 test_13.py \
+            --policy "$algo" \
+            --hidden_size 64 \
+            --batch_size 128 \
+            --seed "$seed" \
+            --expl_noise "$expl_noise"
+            --load_model "default"
+    done
+done
+
+: << 'COMMENT'
+
+algorithms=("DDPG" "TD3")
+
+for algo in "${algorithms[@]}"; do
+    for seed in {0..3}; do
+        if [ "$algo" == "SAC" ]; then
+            expl_noise=0.0
+        else
+            expl_noise=0.3
+        fi
+
+        python3 test_13.py \
             --policy "$algo" \
             --hidden_size 64 \
             --batch_size 128 \
