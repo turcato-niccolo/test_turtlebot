@@ -133,63 +133,21 @@ class RealEnv():
     def load_model_params(self, args):
         '''Load model parameters from file'''
         if args.load_model:
-            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb')) 
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb'))
             critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_critic.pkl', 'rb'))
 
-            if 'TD3' in args.policy:
-                #Actor
-                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
-                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
-                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
-                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
-                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
-                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
-                #Critic
-                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
-                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
-                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
-                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
-                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
-                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
-                self.policy.critic.l4.weight = torch.nn.Parameter(torch.tensor(critic_params[6], requires_grad=True))
-                self.policy.critic.l4.bias = torch.nn.Parameter(torch.tensor(critic_params[7], requires_grad=True))
-                self.policy.critic.l5.weight = torch.nn.Parameter(torch.tensor(critic_params[8], requires_grad=True))
-                self.policy.critic.l5.bias = torch.nn.Parameter(torch.tensor(critic_params[9], requires_grad=True))
-                self.policy.critic.l6.weight = torch.nn.Parameter(torch.tensor(critic_params[10], requires_grad=True))
-                self.policy.critic.l6.bias = torch.nn.Parameter(torch.tensor(critic_params[11], requires_grad=True))
-            elif 'ExpD3' in args.policy:
-                #Actor
-                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
-                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
-                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
-                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
-                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
-                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
-                #Critic
-                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
-                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
-                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
-                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
-                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
-                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
-            elif 'DDPG' in args.policy:
-                #Actor
-                self.policy.actor.l1.weight = torch.nn.Parameter(torch.tensor(actor_params[0], requires_grad=True))
-                self.policy.actor.l1.bias = torch.nn.Parameter(torch.tensor(actor_params[1], requires_grad=True))
-                self.policy.actor.l2.weight = torch.nn.Parameter(torch.tensor(actor_params[2], requires_grad=True))
-                self.policy.actor.l2.bias = torch.nn.Parameter(torch.tensor(actor_params[3], requires_grad=True))
-                self.policy.actor.l3.weight = torch.nn.Parameter(torch.tensor(actor_params[4], requires_grad=True))
-                self.policy.actor.l3.bias = torch.nn.Parameter(torch.tensor(actor_params[5], requires_grad=True))
-                #Critic
-                self.policy.critic.l1.weight = torch.nn.Parameter(torch.tensor(critic_params[0], requires_grad=True))
-                self.policy.critic.l1.bias = torch.nn.Parameter(torch.tensor(critic_params[1], requires_grad=True))
-                self.policy.critic.l2.weight = torch.nn.Parameter(torch.tensor(critic_params[2], requires_grad=True))
-                self.policy.critic.l2.bias = torch.nn.Parameter(torch.tensor(critic_params[3], requires_grad=True))
-                self.policy.critic.l3.weight = torch.nn.Parameter(torch.tensor(critic_params[4], requires_grad=True))
-                self.policy.critic.l3.bias = torch.nn.Parameter(torch.tensor(critic_params[5], requires_grad=True))
+            if 'TD3' in args.policy or 'ExpD3' in args.policy or 'DDPG' in args.policy:
+                # For these algorithms, the actor is stored in self.policy.actor
+                for param, saved in zip(self.policy.actor.parameters(), actor_params):
+                    param.data.copy_(torch.from_numpy(saved).to(param.data.device))
+                for param, saved in zip(self.policy.critic.parameters(), critic_params):
+                    param.data.copy_(torch.from_numpy(saved).to(param.data.device))
             elif 'SAC' in args.policy:
-                # TODO: Implement SAC model loading
-                pass
+                # For SAC, actor parameters were saved from self.policy.policy
+                for param, saved in zip(self.policy.policy.parameters(), actor_params):
+                    param.data.copy_(torch.from_numpy(saved).to(param.data.device))
+                for param, saved in zip(self.policy.critic.parameters(), critic_params):
+                    param.data.copy_(torch.from_numpy(saved).to(param.data.device))
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
