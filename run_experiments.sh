@@ -11,7 +11,7 @@ for algo in "${algorithms[@]}"; do
             expl_noise=0.3
         fi
 
-        python3 test_13.py \
+        python3 test_14.py \
             --policy "$algo" \
             --hidden_size 64 \
             --batch_size 128 \
@@ -23,6 +23,15 @@ done
 
 : << 'COMMENT'
 
+python3 train_13.py \
+    --policy TD3 \
+    --hidden_size 64 \
+    --batch_size 128 \
+    --seed 0 \
+    --expl_noise 0.1 \
+    --load_model "default"
+
+------------------------------------------------------------------------------
 algorithms=("DDPG" "TD3")
 
 for algo in "${algorithms[@]}"; do

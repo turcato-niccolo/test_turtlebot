@@ -96,7 +96,7 @@ class RealEnv():
         self.batch_size = args.batch_size
 
         self.max_time = 20
-        self.max_episode = 100
+        self.max_episode = 1
         self.max_count = 150
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
@@ -133,8 +133,8 @@ class RealEnv():
     def load_model_params(self, args):
         '''Load model parameters from file'''
         if args.load_model:
-            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb'))
-            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_critic.pkl', 'rb'))
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/4_actor.pkl', 'rb'))
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/4_critic.pkl', 'rb'))
 
             if 'TD3' in args.policy or 'ExpD3' in args.policy or 'DDPG' in args.policy:
                 # For these algorithms, the actor is stored in self.policy.actor
@@ -278,85 +278,6 @@ class RealEnv():
         
         return reward, False, False
 
-    def train(self):
-        '''Training function'''
-        if self.count == 0:
-            self.episode_time = rospy.get_time()
-
-        if self.timestep > 1e3:
-            action = self.policy.select_action(self.state)
-            action = (action + np.random.normal(0, self.expl_noise, size=self.action_dim)
-                        ).clip(-self.max_action, self.max_action)
-        else:
-            action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
-
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
-
-        if self.timestep > 1e3:
-            train_time = rospy.get_time()
-            self.policy.train(self.replay_buffer, batch_size=self.batch_size)
-            train_time = rospy.get_time() - train_time
-            self.dt = train_time
-        else:
-            rospy.sleep(self.TIME_DELTA)
-
-        reward, done, target = self.get_reward()
-        self.episode_reward += reward
-
-        '''elapsed_time = rospy.get_time() - self.episode_time
-        if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
-            done = True
-
-        if self.old_state is not None:
-            self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
-
-        # Update state and action
-        self.old_state = None if done else self.state
-        self.old_action = None if done else action
-        self.episode_timesteps += 1
-        self.timestep += 1
-        self.count += 1
-
-        if done:
-            self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
-            if self.expl_noise > 0.05:
-                self.expl_noise = self.expl_noise - ((0.1 - 0.05) / 50)
-            
-            self.training_reward.append(self.episode_reward)
-            self.training_suc.append(1) if target is True else self.training_suc.append(0)
-            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
-            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
-
-            # Reset episode variables
-            self.episode_reward = 0
-            self.episode_timesteps = 0
-            self.count = 0
-            self.reset()
-
-            # Check if it's time for evaluation (after this episode)
-            if self.episode_num % self.eval_freq == 0:
-                print("-" * 80)
-                print(f"VALIDATING - EPOCH {self.epoch + 1}")
-                print("-" * 80)
-                # Reset evaluation counters
-                self.e = 1  # Start evaluation counter from 1
-                self.avrg_reward = 0
-                self.suc = 0
-                self.col = 0
-                self.dt = 1 / 100
-            
-            # Increment episode number
-            self.episode_num += 1
-            
-            # Reset flags for come state
-            self.train_flag = False
-            self.come_flag = True
-
     def evaluate(self):
         '''Evaluation function'''
         self.trajectory.append([self.x, self.y])
@@ -419,13 +340,10 @@ class RealEnv():
                 # Save model
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
-                # Save buffer
-                with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
-                    pkl.dump(self.replay_buffer, f)
-
                 # Reset for next evaluation cycle
                 self.all_trajectories = []
                 self.epoch += 1
+                self.episode_num += 1
 
     def come(self):
         '''Come state logic'''
@@ -494,7 +412,7 @@ class RealEnv():
         self.odom()
 
         # Check if we have exceeded the maximum number of episodes
-        if self.episode_num > self.max_episode + 1:
+        if self.episode_num > self.max_episode:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
@@ -503,8 +421,6 @@ class RealEnv():
         """State machine logic"""
         if self.come_flag:
             self.come()
-        elif self.train_flag:
-            self.train()
         elif self.evaluate_flag:
             self.evaluate()
             rospy.sleep(self.TIME_DELTA)
