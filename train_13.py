@@ -96,7 +96,7 @@ class RealEnv():
         self.batch_size = args.batch_size
 
         self.max_time = 20
-        self.max_episode = 400
+        self.max_episode = 100
         self.max_count = 150
         self.max_timesteps = 1
         self.expl_noise = args.expl_noise
