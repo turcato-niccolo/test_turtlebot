@@ -80,7 +80,7 @@ def plot_trajectory_grid(trajectory_files, save_path=None, show=True, grid_size=
             # Add title (episode number extracted from filename)
             filename = os.path.basename(file_path)
             episode = filename.split('_')[0]  # Assuming filename format is "X_trajectories.npz"
-            ax.set_title(f"Episode {episode}")
+            ax.set_title(f"Epoch {episode}")
             
             # Only add x and y labels for the bottom and left plots
             if i >= (rows-1) * cols:  # Bottom row

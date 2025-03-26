@@ -110,8 +110,10 @@ class RealEnv():
         self.count = 0
 
         self.training_reward = []
+        self.training_time = []
         self.training_suc = []
         self.evaluations_reward = []
+        self.evaluations_time = []
         self.evaluations_suc = []
         self.all_trajectories = []
         self.trajectory = []
@@ -331,8 +333,10 @@ class RealEnv():
             
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            self.training_time.append(self.episode_time)
             np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
             np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
+            np.save(f"./runs/results/{self.args.policy}/training_time_seed{self.args.seed}", self.training_time)
 
             # Reset episode variables
             self.episode_reward = 0
@@ -393,6 +397,7 @@ class RealEnv():
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
             
+            self.evaluations_time.append(self.episode_time) if target is True else self.evaluations_time.append(0)
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
             
@@ -421,6 +426,8 @@ class RealEnv():
                         **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
+                np.save(f"./runs/results/{self.args.policy}/evaluations_time_seed{self.args.seed}", self.evaluations_time)
+
                 # Save model
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
