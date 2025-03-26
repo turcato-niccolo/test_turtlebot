@@ -378,6 +378,9 @@ class RealEnv():
         
         if self.count > self.max_count:
             done = True
+        
+        if self.epoch == 0 and self.old_state is not None:
+            self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
 
         self.count += 1
         self.old_state = None if done else self.state
