@@ -1,10 +1,10 @@
 #!/bin/bash
 
-python3 train_13.py \
-    --policy DDPG \
+python3 train_14.py \
+    --policy TD3 \
     --hidden_size 64 \
     --batch_size 128 \
-    --seed 0 \
+    --seed 4 \
     --expl_noise 0.1 \
     --load_model "default"
 
