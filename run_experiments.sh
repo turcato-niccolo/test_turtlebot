@@ -16,7 +16,7 @@ for algo in "${algorithms[@]}"; do
             --hidden_size 64 \
             --batch_size 128 \
             --seed "$seed" \
-            --expl_noise "$expl_noise"
+            --expl_noise "$expl_noise" \
             --load_model "default"
     done
 done
