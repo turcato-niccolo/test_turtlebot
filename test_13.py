@@ -389,6 +389,7 @@ class RealEnv():
                 # Reset for next evaluation cycle
                 self.all_trajectories = []
                 self.epoch += 1
+                self.episode_num += 1
 
     def come(self):
         '''Come state logic'''
