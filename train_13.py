@@ -166,7 +166,7 @@ class RealEnv():
     def homogeneous_transformation(self, v):
         '''Homogeneous transformation of x,y position'''
         H = np.array([[0, 1, 0],
-                      [-1, 0, 1],
+                      [-1, 0, 1.2],
                       [0, 0, 1]])
 
 
