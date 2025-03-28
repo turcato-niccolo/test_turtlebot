@@ -49,7 +49,7 @@ class GazeboEnv:
         elif 'TD3' in args.policy:
             self.TIME_DELTA = 1/5.9
         elif 'SAC' in args.policy:
-            self.TIME_DELTA = 1/5.9
+            self.TIME_DELTA = 1/3.3
         elif 'ExpD3' in args.policy:
             self.TIME_DELTA = 1/8
         else:
