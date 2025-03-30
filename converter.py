@@ -51,7 +51,7 @@ class GazeboEnv:
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
 
-        print("START TRAINING...\n")
+        print("STOP\n")
 
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
