@@ -1,6 +1,10 @@
-import pickle as pkl
+from gym import spaces
 import numpy as np
-import rospy
+import torch
+import random
+import pygame
+import copy
+import gym
 import os
 
 from algorithms import ExpD3
@@ -8,42 +12,24 @@ from algorithms import OurDDPG
 from algorithms import TD3
 from algorithms import SAC
 
-from nav_msgs.msg import Odometry
-from std_srvs.srv import Empty
-from geometry_msgs.msg import Twist
-from gazebo_msgs.srv import SetModelState
-from gazebo_msgs.msg import ModelState
-import tf.transformations
-
 from utils import ReplayBuffer
 from config import parse_args
+import robot_dynamic as rd
 
-class GazeboEnv:
+class MobileRobotEnv(gym.Env):
+    """
+    A simple mobile robot environment for reinforcement learning.
+    The robot can move in a 2D space and has to reach a target position.
+    """
     def __init__(self, args, kwargs):
-
-        self.state = None
+        super(MobileRobotEnv, self).__init__()
+        self.x, self.y, self.theta = -1, 0, 0
+        self.state = np.array([self.x, self.y, self.theta, 0, 0, 0])
         self.old_state = None
         self.old_action = None
-        self.x, self.y, self.theta = -1, 0, 0
 
         self.MAX_VEL = [0.5, np.pi/4]
 
-        # Environment parameters
-        self.GOAL = np.array([1.0, 0.0])
-        self.OBSTACLE = np.array([0.0, 0.0])
-        self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
-        self.OBST_W = 0.5
-        self.OBST_D = 0.2
-        self.HOME = np.array([-1, 0.0])
-
-        # Reward parameters
-        self.DISTANCE_PENALTY = 0.5
-        self.GOAL_REWARD = 1000
-        self.OBSTACLE_PENALTY = 100
-        self.MOVEMENT_PENALTY = 1
-        self.GAUSSIAN_REWARD_SCALE = 2
-        
         if 'DDPG' in args.policy:
             self.TIME_DELTA = 1/5.8
         elif 'TD3' in args.policy:
@@ -55,29 +41,54 @@ class GazeboEnv:
         else:
             pass
 
+        # Define action and observation space
+        self.observation_space = spaces.Box(
+            low=np.array([-1] * 6, dtype=np.float32),
+            high=np.array([1] * 6, dtype=np.float32),
+            dtype=np.float32
+        )
+        self.action_space = spaces.Box(
+            low=np.array([-1, -1], dtype=np.float32),
+            high=np.array([1, 1], dtype=np.float32),
+            dtype=np.float32
+        )
+
+        # Environment parameters
+        self.GOAL = np.array([1.0, 0.0])
+        self.OBSTACLE = np.array([0.0, 0.0])
+        self.WALL_DIST = 1.0
+        self.GOAL_DIST = 0.15
+        self.OBST_W = 0.5
+        self.OBST_D = 0.2
+        self.HOME = np.array([-1, 0.0])
+
+        # Enhanced visualization settings
+        self.window_size = 700  # Increased window size
+        self.background_color = (240, 240, 245)  # Light gray-blue background
+        self.grid_color = (200, 200, 200)  # Light gray grid
+        self.grid_spacing = 50  # Grid cell size in pixels
+        
+        # Colors
+        self.robot_color = (30, 144, 255)  # Dodger blue
+        self.robot_outline = (0, 0, 102)   # Dark blue
+        self.target_color = (255, 69, 0, 180)  # Red-orange with transparency
+        self.obstacle_color = (70, 70, 70, 100)  # Dark gray with transparency
+        self.spawn_area_color = (144, 238, 144, 80)  # Light green with transparency
+        
+        # Trail settings
+        self.trail_length = 50
+        self.trail_points = []
+        self.trail_color = (135, 206, 235, 100)  # Sky blue with transparency
+
+        if True:
+            pygame.init()
+            self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+            pygame.display.set_caption("Mobile Robot Navigation Environment")
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.SysFont('Arial', 24)
+        
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
-        self._initialize_ros()
-
-        print("START TRAINING...\n")
-    
-    def _initialize_ros(self):
-        """Initialize ROS nodes, publishers, and services"""
-        
-        # Initialize ROS node and publishers
-        rospy.init_node('environment', anonymous=True)                                      # Initialize ROS node
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-        self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-        self.reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)                 # Initialize simulation reset service
-        self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
-        self.reset()
-
-        # Initialize odometry subscriber
-        rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
-
-        self.reset_simulation()
-        self.unpause()
-        print("ENV INIT...")
 
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
@@ -97,12 +108,11 @@ class GazeboEnv:
             raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
         self.replay_buffer = ReplayBuffer(state_dim, self.action_dim, buffer_size)
-        self.load_model(args)
 
     def _init_parameters(self, args):
         # Parameters
         self.args = args
-        self.dt = 1 / 30
+        self.dt = self.TIME_DELTA
 
         self.max_action = float(1)
         self.batch_size = args.batch_size
@@ -140,142 +150,10 @@ class GazeboEnv:
         self.move_flag = False
         self.rotation_flag = True
 
-    def load_model(self, args):
-        '''Load a pre-trained model'''
-        if args.load_model:
-            # If the user typed "default", use a predefined file name
-            if args.load_model == "default":
-                file_to_load = "file_name"
-            else:
-                file_to_load = args.load_model
-                self.epoch = int(file_to_load.split("/")[-1])
+    def _get_obs(self):
+        pass
 
-                if self.epoch != 0:
-                    self.evaluations_reward = np.load(f"./runs/results/{args.policy}/evaluations_reward_seed{args.seed}.npy").tolist()
-                    self.evaluations_suc = np.load(f"./runs/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
-
-            self.policy.load(file_to_load)
-            print(f"Model loaded: {file_to_load}")
-        else:
-            pass
-
-    def save_model_params(self):
-        actor_params = self.policy.actor.parameters()
-        critic_params = self.policy.critic.parameters()
-        
-        p_actor = [l.cpu().detach().numpy() for l in actor_params]
-        p_critic = [l.cpu().detach().numpy() for l in critic_params]   
-        
-        pkl.dump(p_actor, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'wb'))
-        pkl.dump(p_critic, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'wb'))
-
-    def set_position(self):
-        rospy.wait_for_service('/gazebo/set_model_state')
-        # Create a service proxy
-        set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-        
-        # Create a new ModelState message
-        state_msg = ModelState()
-        # Set the model name; ensure this matches your robot's model name in Gazebo.
-        state_msg.model_name = 'turtlebot3_burger'
-        
-        # Define the new pose (position and orientation)
-        state_msg.pose.position.x = self.HOME[0]  # new x position
-        state_msg.pose.position.y = self.HOME[1]  # new y position
-        state_msg.pose.position.z = 0.0  # new z position, typically 0 for ground robots
-        
-        # Orientation as a quaternion (x, y, z, w). Here it's set to no rotation.
-        state_msg.pose.orientation.x = 0.0
-        state_msg.pose.orientation.y = 0.0
-        state_msg.pose.orientation.z = 0.0
-        state_msg.pose.orientation.w = 1.0
-        
-        # Optionally, define the twist (velocity); here we set it to zero.
-        state_msg.twist.linear.x = 0.0
-        state_msg.twist.linear.y = 0.0
-        state_msg.twist.linear.z = 0.0
-        state_msg.twist.angular.x = 0.0
-        state_msg.twist.angular.y = 0.0
-        state_msg.twist.angular.z = 0.0
-        
-        # Specify the reference frame. "world" is commonly used.
-        state_msg.reference_frame = 'world'
-        
-        # Call the service with the message
-        resp = set_state(state_msg)
-
-    def odom(self):
-        """Extract state information from odometry message"""
-        # Robot position
-        x = self.msg.pose.pose.position.x #+ self.HOME[0]
-        y = self.msg.pose.pose.position.y #+ self.HOME[1]
-        self.x, self.y = x, y
-        # Get orientation
-        quaternion = (
-            self.msg.pose.pose.orientation.x,
-            self.msg.pose.pose.orientation.y,
-            self.msg.pose.pose.orientation.z,
-            self.msg.pose.pose.orientation.w
-        )
-        euler = tf.transformations.euler_from_quaternion(quaternion)
-        yaw = euler[2]
-        self.theta = yaw
-        
-        # Robot velocities
-        linear_vel = self.msg.twist.twist.linear.x
-        vel_x = linear_vel * np.cos(yaw)
-        vel_y = linear_vel * np.sin(yaw)
-        angular_vel = self.msg.twist.twist.angular.z
-        
-        #self.state = np.array([x, y, yaw, vel_x, vel_y, angular_vel])
-
-        # Compute distance to goal
-        dx = self.GOAL[0] - x
-        dy = self.GOAL[1] - y
-        distance = np.linalg.norm([dx, dy])
-        
-        # Compute the angle from the robot to the goal
-        goal_angle = np.arctan2(dy, dx)
-        
-        # Compute the relative heading error (normalize to [-pi, pi])
-        e_theta_g = (yaw - goal_angle + np.pi) % (2 * np.pi) - np.pi
-        
-        # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
-        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle)
-        
-        # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
-        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle)
-
-        # Compute distance to obstacle (assuming obstacle is at the origin)
-        d_obs = np.linalg.norm([x, y])
-        
-        # Create the processed state vector
-        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
-    
-    def publish_velocity(self, action):
-        # Publish velocity commands to the robot
-        vel_msg = Twist()
-        vel_msg.linear.x = action[0] * self.MAX_VEL[0]
-        vel_msg.angular.z = action[1] * self.MAX_VEL[1]
-        self.cmd_vel_pub.publish(vel_msg)
-
-    def reset(self):
-        # Publish velocity commands to stop the robot
-        vel_msg = Twist()
-        vel_msg.linear.x = 0
-        vel_msg.angular.z = 0
-        self.cmd_vel_pub.publish(vel_msg)
-        # Change initila position
-        r = np.sqrt(np.random.uniform(0,1))*0.1
-        theta = np.random.uniform(0,2*np.pi)
-        self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
-        # Set the position
-        self.set_position()
-        #self.reset_world()
-        rospy.sleep(0.5)
-
-    def get_reward(self):
-
+    def _get_reward(self):
         next_distance = self.state[0]
         
         goal_threshold = self.GOAL_DIST   # Distance below which the goal is considered reached (meters)
@@ -288,17 +166,17 @@ class GazeboEnv:
         # Check if the goal is reached
         if next_distance < goal_threshold:
             #print("WIN")
-            return goal_reward, True, True
+            return goal_reward
         
         # Check boundary violation:
         if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
             #print("DANGER ZONE")
-            return boundary_penalty, True, False
+            return boundary_penalty
         
         # Check collision with obstacle:
         if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
             #print("COLLISION")
-            return collision_penalty, True, False
+            return collision_penalty
         
         if self.old_state is not None:
             distance = self.old_state[0]
@@ -307,170 +185,200 @@ class GazeboEnv:
         else:
             reward = 0
         
-        return reward, False, False
+        return reward
 
-    def train(self):
-
-        if self.count == 0:
-            self.episode_time = rospy.get_time()
-
-        if self.timestep > 1e3:
-            action = self.policy.select_action(self.state)
-            action = (action + np.random.normal(0, self.expl_noise, size=self.action_dim)
-                        ).clip(-self.max_action, self.max_action)
+    def _is_done(self):
+        # Check if the robot has reached the goal or if it has collided with an obstacle
+        if np.linalg.norm(self.state[:2] - self.GOAL) < self.GOAL_DIST:
+            return True
+        elif np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
+            return True
+        elif np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
+            return True
         else:
-            action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
+            return False
 
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+    def step(self, action, episode_timesteps, dt):
+        initial_state = [self.x, self.y, self.theta]
+        action = (action + 1) / 2
+        # Apply action to the robot
+        self.x, self.y, self.theta = rd.simulate_robot(action[0], action[1], initial_state, dt)
+        self.old_state = self.state
+        self.state = np.array([self.x, self.y, self.theta, 0, 0, 0])
 
-        if self.timestep > 1e3:
-            self.policy.train(self.replay_buffer, batch_size=self.batch_size)
-            rospy.sleep(self.TIME_DELTA)
-        else:
-            rospy.sleep(self.TIME_DELTA)
+        return self.state, self._get_reward(), self._is_done(), {}
 
-        reward, done, target = self.get_reward()
-        self.episode_reward += reward
+    def reset(self):
 
-        '''elapsed_time = rospy.get_time() - self.episode_time
-        if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
-            done = True
+        r = np.sqrt(np.random.uniform(0,1))*0.1
+        theta = np.random.uniform(0,2*np.pi)
+        # Reset the environment to an initial state
+        self.x = -1 + r * np.cos(theta)
+        self.y = 0 + r * np.sin(theta)
+        self.theta = 0
+        self.state = np.array([self.x, self.y, self.theta, 0, 0, 0])
+        self.old_state = None
 
-        if self.old_state is not None:
-            self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
+        return copy.deepcopy(self.state)
 
-        # Update state and action
-        self.old_state = None if done else self.state
-        self.old_action = None if done else action
-        self.episode_timesteps += 1
-        self.timestep += 1
-        self.count += 1
-
-        if done:
-            self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
-            self.reset()
-            if self.expl_noise > 0.1:
-                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
-
-            # Save training data
-            self.training_reward.append(self.episode_reward)
-            self.training_suc.append(1) if target is True else self.training_suc.append(0)
-            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
-            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
-
-            self.episode_reward = 0
-            self.episode_timesteps = 0
-            self.count = 0
-            self.episode_num += 1
-
-            if ((self.episode_num - 1) % self.eval_freq) == 0:
-                print("-" * 80)
-                print(f"VALIDATING - EPOCH {self.epoch + 1}")
-                print("-" * 80)
-                self.train_flag = False
-                self.evaluate_flag = True
-                self.come_flag = False
-
-    def evaluate(self):
-        self.trajectory.append([self.x, self.y])
-
-        if self.count == 0:
-            self.episode_time = rospy.get_time()
-
-        action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
-
-        reward, done, target = self.get_reward()
-        self.avrg_reward += reward
-
-        '''elapsed_time = rospy.get_time() - self.episode_time
-        if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
-            done = True
-
-        self.count += 1
-        self.old_state = None if done else self.state
-        self.old_action = None if done else action
-
-        if done:
-            self.suc += int(target)      # Increment suc if target is True (1)
-            self.col += int(not target)  # Increment col if target is False (0)
-            self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
-            
-            self.all_trajectories.append(np.array(self.trajectory))
-            self.trajectory = []
-            self.e += 1
-            self.count = 0
-            self.reset()
-
-            if self.e >= self.eval_ep:
-                self.train_flag = True
-                self.evaluate_flag = False
-                self.come_flag = False
-
-                self.avrg_reward /= self.eval_ep
-                avrg_col = self.col / self.eval_ep
-                avrg_suc = self.suc / self.eval_ep
-
-                print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
-                print("-" * 50)
-
-                self.evaluations_reward.append(self.avrg_reward)
-                self.evaluations_suc.append(avrg_suc)
-                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
-                np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
-                np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
-                self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
-
-
-                self.all_trajectories = []
-                self.avrg_reward = 0
-                self.suc = 0
-                self.col = 0
-                self. e = 0
-                self.epoch +=1
-
-    def come(self):
-        # TODO: Implement come logic here
-        pass
-
-    def callback(self, msg):
-        # Update the state
-        self.msg = msg
-        self.odom()
-
-        # Check if we have exceeded the maximum number of episodes
-        if self.episode_num > self.max_episode + 1:
-            print("EXITING. GOODBYE!")
-            self.publish_velocity([0.0, 0.0])
-            rospy.signal_shutdown("EXITING. GOODBYE!")
+    def render(self, mode='human'):
+        if self.screen is None:
             return
+
+        # Fill background
+        self.screen.fill(self.background_color)
         
-        """State machine logic"""
-        if self.come_flag:
-            self.come()
-        elif self.train_flag:
-            self.train()
-        elif self.evaluate_flag:
-            self.evaluate()
-            rospy.sleep(self.TIME_DELTA)
+        # Draw grid
+        for x in range(0, self.window_size, self.grid_spacing):
+            pygame.draw.line(self.screen, self.grid_color, (x, 0), (x, self.window_size))
+        for y in range(0, self.window_size, self.grid_spacing):
+            pygame.draw.line(self.screen, self.grid_color, (0, y), (self.window_size, y))
+        
+        # Update and draw trail
+        if len(self.trail_points) >= self.trail_length:
+            self.trail_points.pop(0)
+        self.trail_points.append(self._to_screen_coordinates([self.x, self.y]))
+
+        if len(self.trail_points) > 1:
+            trail_surface = pygame.Surface((self.window_size, self.window_size), pygame.SRCALPHA)
+            pygame.draw.lines(trail_surface, self.trail_color, False, self.trail_points, 3)
+            self.screen.blit(trail_surface, (0, 0))
+        
+        # Draw obstacle
+        penalty_area_top_left = self._to_screen_coordinates(np.array([-self.OBST_D/2, self.OBST_W/2]))
+        penalty_area_bottom_right = self._to_screen_coordinates(np.array([self.OBST_D/2, -self.OBST_W/2]))
+        
+        width = penalty_area_bottom_right[0] - penalty_area_top_left[0]
+        height = penalty_area_bottom_right[1] - penalty_area_top_left[1]
+        
+        # Create surface for semi-transparent obstacle
+        obstacle_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        pygame.draw.rect(obstacle_surface, self.obstacle_color, (0, 0, width, height))
+        pygame.draw.rect(obstacle_surface, (0, 0, 0), (0, 0, width, height), 2)
+        
+        # Add striped pattern
+        stripe_spacing = 20
+        for i in range(0, width + height, stripe_spacing):
+            start_pos = (i, 0)
+            end_pos = (0, i)
+            pygame.draw.line(obstacle_surface, (0, 0, 0, 30), start_pos, end_pos, 2)
+            
+        self.screen.blit(obstacle_surface, penalty_area_top_left)
+        
+        # Draw spawn area
+        spawn_area_top_left = self._to_screen_coordinates(np.array([-1, 0.15]))
+        spawn_area_bottom_right = self._to_screen_coordinates(np.array([-0.85, -0.15]))
+        
+        width = spawn_area_bottom_right[0] - spawn_area_top_left[0]
+        height = spawn_area_bottom_right[1] - spawn_area_top_left[1]
+        
+        spawn_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        pygame.draw.rect(spawn_surface, self.spawn_area_color, (0, 0, width, height))
+        pygame.draw.rect(spawn_surface, (0, 100, 0), (0, 0, width, height), 2)
+        
+        # Add dotted pattern
+        dot_spacing = 10
+        for x in range(0, width, dot_spacing):
+            for y in range(0, height, dot_spacing):
+                pygame.draw.circle(spawn_surface, (0, 100, 0, 50), (x, y), 1)
+                
+        self.screen.blit(spawn_surface, spawn_area_top_left)
+
+        # Draw target
+        target_pos = self._to_screen_coordinates(self.GOAL)
+        target_radius = 25
+        
+        # Outer glow effect
+        for r in range(target_radius + 10, target_radius - 1, -2):
+            alpha = int(100 * (1 - (r - target_radius) / 10))
+            target_surface = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(target_surface, (*self.target_color[:3], alpha), (r, r), r)
+            self.screen.blit(target_surface, (target_pos[0] - r, target_pos[1] - r))
+        
+        # Main target circle
+        target_surface = pygame.Surface((target_radius * 2, target_radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(target_surface, self.target_color, (target_radius, target_radius), target_radius)
+        pygame.draw.circle(target_surface, (255, 0, 0), (target_radius, target_radius), target_radius, 2)
+        self.screen.blit(target_surface, (target_pos[0] - target_radius, target_pos[1] - target_radius))
+        
+        # Draw robot
+        R = np.array([[np.cos(self.theta), -np.sin(self.theta)],
+                     [np.sin(self.theta), np.cos(self.theta)]])
+        
+        robot_size = 0.08
+        points = [
+            [self.x, self.y] + np.dot(R, np.array([robot_size, 0])),  # Front
+            [self.x, self.y] + np.dot(R, np.array([-robot_size/2, robot_size/2])),  # Back left
+            [self.x, self.y] + np.dot(R, np.array([-robot_size/2, -robot_size/2]))  # Back right
+        ]
+        
+        screen_points = [self._to_screen_coordinates(p) for p in points]
+        
+        # Draw robot body
+        pygame.draw.polygon(self.screen, self.robot_color, screen_points)
+        pygame.draw.polygon(self.screen, self.robot_outline, screen_points, 2)
+        
+        # Draw direction indicator
+        front_center = self._to_screen_coordinates([self.x, self.y] + np.dot(R, np.array([robot_size*1.2, 0])))
+        center = self._to_screen_coordinates([self.x, self.y])
+        pygame.draw.line(self.screen, self.robot_outline, center, front_center, 2)
+        
+        # Draw info overlay
+        info_surface = pygame.Surface((200, 100), pygame.SRCALPHA)
+        text_color = (50, 50, 50)
+        
+        # Display position and orientation
+        pos_text = self.font.render(f'x: {self.x:.2f} y: {self.y:.2f}', True, text_color)
+        angle_text = self.font.render(f'α: {np.degrees(self.theta):.1f}°', True, text_color)
+        
+        info_surface.blit(pos_text, (10, 10))
+        info_surface.blit(angle_text, (10, 40))
+        
+        self.screen.blit(info_surface, (10, 10))
+
+        pygame.display.flip()
+        self.clock.tick(60)
+
+    def close(self):
+        if self.screen is not None:
+            pygame.quit()
+            self.screen = None
+
+    def _to_screen_coordinates(self, pos):
+        """Convert environment coordinates to screen coordinates"""
+        return (
+            int((pos[0] + 1) / 2 * self.window_size),
+            int((1 - (pos[1] + 1) / 2) * self.window_size)
+        )
+
+    def seed(self, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+            random.seed(seed)
+            self.action_space.seed(seed)
+            self.observation_space.seed(seed)
 
 
-# TODO: Metriche da aggiungere:
-# TODO: Tempo medio necessario per arrivare al target (capire cosa sommare se non lo si raggiunge)
-# TODO: Traiettoria (anche il rapporto tra la lunghezza minima = 2 e quella fatta dal robot)
-# TODO: Sample efficency (basta controllare quando grande è il buffer ?)
-# TODO: Ablation studies
+
+def eval_policy(policy, seed, args, kwargs, eval_episodes=10):
+	eval_env = MobileRobotEnv(args, kwargs)
+	eval_env.seed(seed + 100)
+
+	avg_reward = 0.
+	for _ in range(eval_episodes):
+		state, done = eval_env.reset(), False
+		while not done:
+			action = policy.select_action(np.array(state))
+			state, reward, done, _ = eval_env.step(action, 0, 0.1)
+			avg_reward += reward
+
+	avg_reward /= eval_episodes
+
+	print("---------------------------------------")
+	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
+	print("---------------------------------------")
+	return avg_reward
 
 
 def main():
@@ -482,9 +390,67 @@ def main():
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
+
+    env = MobileRobotEnv(args, kwargs)
+    env.seed(args.seed)
+    file_name = f"{args.policy}_{args.seed}"
+    state = env.reset()
+    done = False
+    steps = 0
+
+    print("Starting simulation...")
+
+    evaluations = [eval_policy(env.policy, args.seed, args, kwargs)]
+    episode_timesteps = 0
+    episode_num = 0
+    episode_reward = 0
+    timesteps = 0
+    e = 0
+
+    while e < 400:
+        if done:
+            state = env.reset()
+            done = False
+            steps = 0
+            e += 1
+            episode_timesteps = 0
+            episode_reward = 0
+
+        if timesteps < args.start_timesteps:
+            action = env.action_space.sample()
+        else:
+            action = (env.policy.select_action(state) + np.random.normal(0, env.expl_noise, size=env.action_dim)).clip(-env.max_action, env.max_action)
+        
+        next_state, reward, done, _ = env.step(action, episode_timesteps=steps, dt=env.dt)
+        done_bool = float(done) if episode_timesteps < env.count else 0
+
+        env.replay_buffer.add(state, action, next_state, reward, done_bool)
+
+        episode_reward += reward
+        episode_timesteps += 1
+
+        state = next_state
+        env.render()
+
+        # Train agent after collecting sufficient data
+        if timesteps >= args.start_timesteps:
+            env.policy.train(env.replay_buffer, args.batch_size)
+        
+        if done: 
+			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
+            print(f"Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+			# Reset environment
+            state, done = env.reset(), False
+            episode_reward = 0
+            episode_timesteps = 0
+            episode_num += 1 
+
+		# Evaluate episode
+        if (e + 1) % args.eval_freq == 0:
+            evaluations.append(eval_policy(env.policy, args.seed, args, kwargs))
+            np.save(f"./runs/results/{file_name}", evaluations)
+            if args.save_model: env.policy.save(f".runs/models/{file_name}")
     
-    GazeboEnv(args, kwargs)
-    rospy.spin()
 
 if __name__ == "__main__":
     main()
