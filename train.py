@@ -80,6 +80,7 @@ class MobileRobotEnv(gym.Env):
         self.trail_points = []
         self.trail_color = (135, 206, 235, 100)  # Sky blue with transparency
 
+        self.screen = None
         if True:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
@@ -151,7 +152,7 @@ class MobileRobotEnv(gym.Env):
         self.rotation_flag = True
 
     def _get_obs(self):
-        pass
+        return copy.deepcopy(self.state)
 
     def _get_reward(self):
         next_distance = self.state[0]
@@ -206,10 +207,13 @@ class MobileRobotEnv(gym.Env):
         self.old_state = self.state
         self.state = np.array([self.x, self.y, self.theta, 0, 0, 0])
 
-        return self.state, self._get_reward(), self._is_done(), {}
+        reward = self._get_reward()
+        done = self._is_done()
+        info = {}
+
+        return self.state, reward, done, info
 
     def reset(self):
-
         r = np.sqrt(np.random.uniform(0,1))*0.1
         theta = np.random.uniform(0,2*np.pi)
         # Reset the environment to an initial state
@@ -218,6 +222,9 @@ class MobileRobotEnv(gym.Env):
         self.theta = 0
         self.state = np.array([self.x, self.y, self.theta, 0, 0, 0])
         self.old_state = None
+        
+        # Reset trail for visualization
+        self.trail_points = []
 
         return copy.deepcopy(self.state)
 
@@ -265,24 +272,29 @@ class MobileRobotEnv(gym.Env):
             
         self.screen.blit(obstacle_surface, penalty_area_top_left)
         
-        # Draw spawn area
-        spawn_area_top_left = self._to_screen_coordinates(np.array([-1, 0.15]))
-        spawn_area_bottom_right = self._to_screen_coordinates(np.array([-0.85, -0.15]))
+        # Draw circular spawn area (replacing rectangle)
+        spawn_center = self._to_screen_coordinates(np.array([-1, 0]))
+        spawn_radius = int(0.1 * self.window_size / 2)  # Convert 0.1 radius to screen pixels
         
-        width = spawn_area_bottom_right[0] - spawn_area_top_left[0]
-        height = spawn_area_bottom_right[1] - spawn_area_top_left[1]
+        # Create a transparent surface for the spawn area
+        spawn_surface = pygame.Surface((spawn_radius*2, spawn_radius*2), pygame.SRCALPHA)
         
-        spawn_surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(spawn_surface, self.spawn_area_color, (0, 0, width, height))
-        pygame.draw.rect(spawn_surface, (0, 100, 0), (0, 0, width, height), 2)
+        # Draw filled circle with transparency
+        pygame.draw.circle(spawn_surface, self.spawn_area_color, (spawn_radius, spawn_radius), spawn_radius)
         
-        # Add dotted pattern
-        dot_spacing = 10
-        for x in range(0, width, dot_spacing):
-            for y in range(0, height, dot_spacing):
-                pygame.draw.circle(spawn_surface, (0, 100, 0, 50), (x, y), 1)
-                
-        self.screen.blit(spawn_surface, spawn_area_top_left)
+        # Draw outline
+        pygame.draw.circle(spawn_surface, (0, 100, 0), (spawn_radius, spawn_radius), spawn_radius, 2)
+        
+        # Add dotted pattern inside the circle
+        for angle in range(0, 360, 30):
+            for radius_factor in [0.3, 0.6, 0.9]:
+                r = spawn_radius * radius_factor
+                x = spawn_radius + r * np.cos(np.radians(angle))
+                y = spawn_radius + r * np.sin(np.radians(angle))
+                pygame.draw.circle(spawn_surface, (0, 100, 0, 50), (int(x), int(y)), 1)
+        
+        # Position the spawn area surface
+        self.screen.blit(spawn_surface, (spawn_center[0] - spawn_radius, spawn_center[1] - spawn_radius))
 
         # Draw target
         target_pos = self._to_screen_coordinates(self.GOAL)
@@ -303,7 +315,7 @@ class MobileRobotEnv(gym.Env):
         
         # Draw robot
         R = np.array([[np.cos(self.theta), -np.sin(self.theta)],
-                     [np.sin(self.theta), np.cos(self.theta)]])
+                    [np.sin(self.theta), np.cos(self.theta)]])
         
         robot_size = 0.08
         points = [
@@ -324,20 +336,23 @@ class MobileRobotEnv(gym.Env):
         pygame.draw.line(self.screen, self.robot_outline, center, front_center, 2)
         
         # Draw info overlay
-        info_surface = pygame.Surface((200, 100), pygame.SRCALPHA)
+        info_surface = pygame.Surface((300, 130), pygame.SRCALPHA)
         text_color = (50, 50, 50)
         
         # Display position and orientation
         pos_text = self.font.render(f'x: {self.x:.2f} y: {self.y:.2f}', True, text_color)
         angle_text = self.font.render(f'α: {np.degrees(self.theta):.1f}°', True, text_color)
+        episode_text = self.font.render(f'Episode: {self.e + 1}/400', True, text_color)
         
         info_surface.blit(pos_text, (10, 10))
         info_surface.blit(angle_text, (10, 40))
+        info_surface.blit(episode_text, (10, 70))
         
         self.screen.blit(info_surface, (10, 10))
 
         pygame.display.flip()
         self.clock.tick(60)
+
 
     def close(self):
         if self.screen is not None:
@@ -360,97 +375,148 @@ class MobileRobotEnv(gym.Env):
             self.observation_space.seed(seed)
 
 
-
 def eval_policy(policy, seed, args, kwargs, eval_episodes=10):
-	eval_env = MobileRobotEnv(args, kwargs)
-	eval_env.seed(seed + 100)
+    eval_env = MobileRobotEnv(args, kwargs)
+    eval_env.seed(seed + 100)
 
-	avg_reward = 0.
-	for _ in range(eval_episodes):
-		state, done = eval_env.reset(), False
-		while not done:
-			action = policy.select_action(np.array(state))
-			state, reward, done, _ = eval_env.step(action, 0, 0.1)
-			avg_reward += reward
+    avg_reward = 0.
+    success_count = 0
+    for _ in range(eval_episodes):
+        state, done = eval_env.reset(), False
+        episode_reward = 0
+        while not done:
+            action = policy.select_action(np.array(state))
+            state, reward, done, _ = eval_env.step(action, 0, eval_env.dt)
+            episode_reward += reward
+            
+            # Check if environment was reached successfully
+            if done and state[0] < 0.15:  # This assumes positive reward means goal reached
+                success_count += 1
+                
+        avg_reward += episode_reward
 
-	avg_reward /= eval_episodes
+    avg_reward /= eval_episodes
+    success_rate = success_count / eval_episodes * 100
 
-	print("---------------------------------------")
-	print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
-	print("---------------------------------------")
-	return avg_reward
+    print("---------------------------------------")
+    print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
+    print(f"Success rate: {success_rate:.1f}%")
+    print("---------------------------------------")
+    return avg_reward
 
 
 def main():
     print("\nRUNNING MAIN...")
     args, kwargs = parse_args()
     
+    # Create necessary directories
     os.makedirs("./runs/replay_buffers", exist_ok=True)
     os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
 
+    # Initialize environment
     env = MobileRobotEnv(args, kwargs)
     env.seed(args.seed)
     file_name = f"{args.policy}_{args.seed}"
+    
+    # Initial evaluation
+    evaluations = [eval_policy(env.policy, args.seed, args, kwargs)]
+    
+    # Training variables
     state = env.reset()
     done = False
-    steps = 0
-
-    print("Starting simulation...")
-
-    evaluations = [eval_policy(env.policy, args.seed, args, kwargs)]
     episode_timesteps = 0
     episode_num = 0
     episode_reward = 0
     timesteps = 0
-    e = 0
-
-    while e < 400:
-        if done:
-            state = env.reset()
-            done = False
-            steps = 0
-            e += 1
-            episode_timesteps = 0
-            episode_reward = 0
-
-        if timesteps < args.start_timesteps:
-            action = env.action_space.sample()
-        else:
-            action = (env.policy.select_action(state) + np.random.normal(0, env.expl_noise, size=env.action_dim)).clip(-env.max_action, env.max_action)
-        
-        next_state, reward, done, _ = env.step(action, episode_timesteps=steps, dt=env.dt)
-        done_bool = float(done) if episode_timesteps < env.count else 0
-
-        env.replay_buffer.add(state, action, next_state, reward, done_bool)
-
-        episode_reward += reward
-        episode_timesteps += 1
-
-        state = next_state
-        env.render()
-
-        # Train agent after collecting sufficient data
-        if timesteps >= args.start_timesteps:
-            env.policy.train(env.replay_buffer, args.batch_size)
-        
-        if done: 
-			# +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
-            print(f"Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
-			# Reset environment
-            state, done = env.reset(), False
-            episode_reward = 0
-            episode_timesteps = 0
-            episode_num += 1 
-
-		# Evaluate episode
-        if (e + 1) % args.eval_freq == 0:
-            evaluations.append(eval_policy(env.policy, args.seed, args, kwargs))
-            np.save(f"./runs/results/{file_name}", evaluations)
-            if args.save_model: env.policy.save(f".runs/models/{file_name}")
+    max_episodes = 400
     
+    print(f"Starting training for {max_episodes} episodes...")
+    
+    try:
+        # Main training loop - run exactly 400 episodes
+        for e in range(max_episodes):
+            env.e = e  # Update episode counter for display
+            
+            # Reset environment at the start of each episode
+            if e > 0 or done:
+                state = env.reset()
+                done = False
+                episode_timesteps = 0
+                episode_reward = 0
+            
+            # Episode loop
+            while not done:
+                # Handle pygame events to prevent freezing
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        env.close()
+                        return
+                
+                # Select action
+                if timesteps < args.start_timesteps:
+                    action = env.action_space.sample()
+                else:
+                    action = (
+                        env.policy.select_action(state) + 
+                        np.random.normal(0, env.expl_noise, size=env.action_dim)
+                    ).clip(-env.max_action, env.max_action)
+                
+                # Take action in environment
+                next_state, reward, done, _ = env.step(action, episode_timesteps=episode_timesteps, dt=env.dt)
+                
+                # Store transition in replay buffer
+                done_bool = float(done) if episode_timesteps < env.max_count else 0
+                env.replay_buffer.add(state, action, next_state, reward, done_bool)
+                
+                # Update tracking variables
+                state = next_state
+                episode_reward += reward
+                episode_timesteps += 1
+                timesteps += 1
+                
+                # Train agent after collecting sufficient data
+                if timesteps >= args.start_timesteps:
+                    env.policy.train(env.replay_buffer, args.batch_size)
+                
+                # Render environment
+                env.render()
+                
+                # Break if max timesteps reached
+                if episode_timesteps >= env.max_count:
+                    done = True
+            
+            # Episode completed
+            print(f"Episode {e+1}/{max_episodes} | Steps: {episode_timesteps} | Reward: {episode_reward:.3f}")
+            
+            # Periodic evaluation
+            if (e + 1) % args.eval_freq == 0:
+                eval_reward = eval_policy(env.policy, args.seed, args, kwargs)
+                evaluations.append(eval_reward)
+                np.save(f"./runs/results/{args.policy}/{file_name}", evaluations)
+                
+                # Save model if requested
+                if args.save_model:
+                    env.policy.save(f"./runs/models/{args.policy}/seed{args.seed}/{file_name}")
+        
+        print("Training completed for all 400 episodes!")
+        
+    except KeyboardInterrupt:
+        print("Training interrupted by user")
+    finally:
+        env.close()
+        
+        # Final evaluation
+        final_eval = eval_policy(env.policy, args.seed, args, kwargs, eval_episodes=20)
+        evaluations.append(final_eval)
+        np.save(f"./runs/results/{args.policy}/{file_name}", evaluations)
+        
+        # Save final model
+        if args.save_model:
+            env.policy.save(f"./runs/models/{args.policy}/seed{args.seed}/{file_name}_final")
+
 
 if __name__ == "__main__":
     main()
