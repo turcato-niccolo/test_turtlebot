@@ -1,12 +1,24 @@
 #!/bin/bash
 
-python3 train_14.py \
-    --policy TD3 \
-    --hidden_size 64 \
-    --batch_size 128 \
-    --seed 4 \
-    --expl_noise 0.1 \
-    --load_model "default"
+algorithms=("DDPG" "TD3")
+
+for algo in "${algorithms[@]}"; do
+    for seed in {4..10}; do
+        if [ "$algo" == "SAC" ]; then
+            expl_noise=0.0
+        else
+            expl_noise=0.3
+        fi
+
+        python3 train.py \
+            --policy "$algo" \
+            --hidden_size 64 \
+            --batch_size 128 \
+            --seed "$seed" \
+            --expl_noise "$expl_noise" \
+            --load_model ""
+    done
+done
 
 : << 'COMMENT'
 

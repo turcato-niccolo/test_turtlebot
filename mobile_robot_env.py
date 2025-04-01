@@ -19,13 +19,13 @@ class MobileRobotEnv(gym.Env):
     A simple mobile robot environment for reinforcement learning.
     The robot can move in a 2D space and has to reach a target position.
     """
-    def __init__(self, args, kwargs):
+    def __init__(self, args, kwargs, rendering=False):
         super(MobileRobotEnv, self).__init__()
         self.x, self.y, self.theta = -1, 0, 0
         self.old_state = None
         self.old_action = None
 
-        self.MAX_VEL = [0.5, np.pi/4]
+        self.MAX_VEL = [1, 1]
 
         if 'DDPG' in args.policy:
             self.TIME_DELTA = 1/5.8
@@ -78,7 +78,7 @@ class MobileRobotEnv(gym.Env):
         self.trail_color = (135, 206, 235, 100)  # Sky blue with transparency
 
         self.screen = None
-        if True:
+        if rendering:
             pygame.init()
             self.screen = pygame.display.set_mode((self.window_size, self.window_size))
             pygame.display.set_caption("Mobile Robot Navigation Environment")
@@ -87,13 +87,13 @@ class MobileRobotEnv(gym.Env):
         
         # Initialize the robot's state
         vel_x, vel_y, angular_vel = 0, 0, 0
-        dx, dy = self.GOAL[0] - self.x, self.GOAL[1] - self.y # Compute distance to goal
-        distance = np.linalg.norm([dx, dy])
+        dx, dy = self.GOAL[0] - self.x, self.GOAL[1] - self.y 
+        distance = np.linalg.norm([dx, dy]) # Compute distance to goal
         goal_angle = np.arctan2(dy, dx) # Compute the angle from the robot to the goal
-        e_theta_g = (self.theta - goal_angle + np.pi) % (2 * np.pi) - np.pi # Compute the relative heading error (normalize to [-pi, pi])
-        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle) # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
-        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle) # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
-        d_obs = np.linalg.norm([self.x, self.y]) # Compute distance to obstacle (assuming obstacle is at the origin)
+        e_theta_g = (self.theta - goal_angle + np.pi) % (2 * np.pi) - np.pi # Compute the relative heading error
+        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle) # Projection of velocity onto goal direction
+        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle) # Component perpendicular to the goal direction
+        d_obs = np.linalg.norm([self.x, self.y]) # Compute distance to obstacle at origin
 
         self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
         
@@ -208,9 +208,9 @@ class MobileRobotEnv(gym.Env):
         else:
             return False
 
-    def step(self, action, episode_timesteps, dt):
+    def step(self, action, dt):
         initial_state = [self.x, self.y, self.theta]
-        action = (action + 1) / 2
+        action[0] = (action[0] + 1) / 2
         # Apply action to the robot
         self.x, self.y, self.theta = rd.simulate_robot(action[0], action[1], initial_state, dt)
         vel_x = action[0] * self.MAX_VEL[0] * np.cos(self.theta)
@@ -238,9 +238,9 @@ class MobileRobotEnv(gym.Env):
 
         reward = self._get_reward()
         done = self._is_done()
-        info = {}
+        target_reached = False if self.state[0] >= self.GOAL_DIST else True
 
-        return self.state, reward, done, info
+        return self.state, reward, done, target_reached
 
     def reset(self):
         r = np.sqrt(np.random.uniform(0,1))*0.1
@@ -404,11 +404,13 @@ class MobileRobotEnv(gym.Env):
             self.screen = None
 
     def _to_screen_coordinates(self, pos):
-        """Convert environment coordinates to screen coordinates"""
-        return (
-            int((pos[0] + 1) / 2 * self.window_size),
-            int((1 - (pos[1] + 1) / 2) * self.window_size)
-        )
+        # Define map boundaries
+        map_min, map_max = -1.2, 1.2
+        # Convert x-coordinate: shift and scale to [0, window_size]
+        x = (pos[0] - map_min) / (map_max - map_min) * self.window_size
+        # Convert y-coordinate: invert the axis so that map_max becomes top
+        y = (map_max - pos[1]) / (map_max - map_min) * self.window_size
+        return int(x), int(y)
 
     def seed(self, seed=None):
         if seed is not None:
