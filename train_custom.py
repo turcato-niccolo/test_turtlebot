@@ -8,6 +8,13 @@ from config import parse_args
 
 class CustomGazeboEnv(GazeboEnv):
 
+    def trajectory(self):
+        """Define the trajectory of the robot"""
+        a, b = 1, 1
+        x_t = a * self.t
+        y_t = b * np.sin(x_t)
+        return x_t, y_t
+
     def odom(self):
         """Extract state information from odometry message"""
         # Robot position
