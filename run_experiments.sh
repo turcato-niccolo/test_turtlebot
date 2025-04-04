@@ -1,5 +1,28 @@
 #!/bin/bash
 
+
+algorithms=("ExpD3")
+
+for algo in "${algorithms[@]}"; do
+    for seed in {0..3}; do
+        if [ "$algo" == "SAC" ]; then
+            expl_noise=0.0
+        else
+            expl_noise=0.3
+        fi
+
+        python3 test_14.py \
+            --policy "$algo" \
+            --hidden_size 64 \
+            --batch_size 128 \
+            --seed "$seed" \
+            --expl_noise "$expl_noise" \
+            --load_model "default"
+    done
+done
+
+: << 'COMMENT'
+
 python3 train_14.py \
     --policy TD3 \
     --hidden_size 64 \
@@ -7,8 +30,7 @@ python3 train_14.py \
     --seed 4 \
     --expl_noise 0.1 \
     --load_model "default"
-
-: << 'COMMENT'
+    
 
 python3 train_14.py \
     --policy SAC \
