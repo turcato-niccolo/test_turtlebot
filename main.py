@@ -11,6 +11,17 @@ import tqdm
 import utils
 import OurDDPG, TD3, SAC, ExpD3
 
+class CustomBox:
+    def __init__(self, low, high, dtype=np.float32):
+        self.low = np.array(low, dtype=dtype)
+        self.high = np.array(high, dtype=dtype)
+        
+    @property
+    def shape(self):
+        # Both self.low and self.high should have the same shape,
+        # so returning either one is valid.
+        return self.low.shape
+
 
 if __name__ == "__main__":
     print("""
@@ -52,9 +63,10 @@ if __name__ == "__main__":
     action_dim = 2
 
     # Define the action bounds
-    action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
-    action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
+    #action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
+    #action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
     #action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+    action_space = CustomBox(low=[-1, -1], high=[1, 1])
     max_action = float(1)
 
     kwargs = {
