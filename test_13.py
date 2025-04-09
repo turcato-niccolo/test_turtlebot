@@ -294,8 +294,8 @@ class RealEnv():
             self.episode_time = rospy.get_time()
 
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        
+        self.publish_velocity(action)
 
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
