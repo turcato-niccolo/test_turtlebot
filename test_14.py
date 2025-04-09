@@ -40,10 +40,11 @@ class RealEnv():
             pass
         
         self.args = args
+        self._init_trajectory()
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
         self._initialize_ros()
-        self._init_trajectory()
+        
 
         print("START TRAINING...\n")
 

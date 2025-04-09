@@ -38,12 +38,11 @@ class RealEnv():
             self.TIME_DELTA = 1/8
         else:
             pass
-        
+        self._init_trajectory()
         self.args = args
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
         self._initialize_ros()
-        self._init_trajectory()
 
         print("START TRAINING...\n")
 
