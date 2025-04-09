@@ -25,7 +25,7 @@ class RealEnv():
         self.MAX_VEL = [0.2, np.pi/2]
 
         # Environment parameters
-        self.GOAL = np.array([0.0, 0.5])
+        self.GOAL = np.array([-0.5, np.sqrt(3)/2])
         self.HOME = np.array([-1, 0.0])
         
         if 'DDPG' in args.policy:
@@ -358,7 +358,7 @@ class RealEnv():
         '''Come state logic'''
         if self.rotation_flag:
             if self.stop_flag:
-                angle_to_goal = np.arctan2(self.GOAL[1] - self.y, self.GOAL[0] - self.x)
+                angle_to_goal = np.pi/3
             else:
                 angle_to_goal = np.arctan2(self.HOME[1] - self.y, self.HOME[0] - self.x)
             
