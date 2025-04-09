@@ -231,8 +231,8 @@ class RealEnv():
 
     def publish_velocity_normal(self, action):
         '''Publish velocity commands to the robot'''
-        v = action[0] * self.MAX_VEL[0]
-        w = action[1] * self.MAX_VEL[1]
+        v = action[0] * 0.5
+        w = action[1] * np.pi/4
         
         d = 0.173
         r = 0.0325
