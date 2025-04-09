@@ -196,6 +196,7 @@ class RealEnv():
             self.msg.pose.pose.orientation.z,
             self.msg.pose.pose.orientation.w
         )
+        x , y = self.homogeneous_transformation([x, y])
         yaw = self.yaw_from_quaternion(quaternion) + 2.8381249
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
         
