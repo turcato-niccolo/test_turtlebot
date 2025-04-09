@@ -1,20 +1,20 @@
 #!/bin/bash
 
 python3 train_14.py \
-    --policy expD3 \
+    --policy TD3 \
     --hidden_size 64 \
     --batch_size 128 \
-    --seed 6 \
+    --seed 0 \
     --expl_noise 0.1 \
     --load_model "default"
 
 : << 'COMMENT'
 
-python3 train_14.py \
-    --policy expD3 \
+python3 train_13.py \
+    --policy TD3 \
     --hidden_size 64 \
     --batch_size 128 \
-    --seed 6 \
+    --seed 1 \
     --expl_noise 0.1 \
     --load_model "default"
     

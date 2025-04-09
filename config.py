@@ -39,14 +39,14 @@ def parse_args():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    state_dim = 6
-    action_dim = 2
+    state_dim = 4
+    action_dim = 1
 
     # Define the action bounds
     '''action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
     action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)'''
-    action_space = CustomBox(low=[-1, -1], high=[1, 1])
+    action_space = CustomBox(low=[-1, -1], high=[1, 1]) if action_dim > 1 else CustomBox(low=-1, high=1)
     max_action = float(1)
 
     if args.policy == "SAC":
