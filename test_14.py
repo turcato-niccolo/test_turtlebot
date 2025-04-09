@@ -403,7 +403,7 @@ class RealEnv():
     def callback(self, msg):
         # Update the state
         self.msg = msg
-        self.odom()
+        self.get_state()
 
         # Check if we have exceeded the maximum number of episodes
         if self.episode_num > self.max_episode:
