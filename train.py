@@ -15,6 +15,8 @@ from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState
 import tf.transformations
 
+from scipy.interpolate import CubicSpline
+
 from utils import ReplayBuffer
 from config import parse_args
 
@@ -26,23 +28,8 @@ class GazeboEnv:
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
 
-        self.MAX_VEL = [0.5, np.pi/4]
-
-        # Environment parameters
-        self.GOAL = np.array([1.0, 0.0])
-        self.OBSTACLE = np.array([0.0, 0.0])
-        self.WALL_DIST = 1.0
-        self.GOAL_DIST = 0.15
-        self.OBST_W = 0.5
-        self.OBST_D = 0.2
-        self.HOME = np.array([-1, 0.0])
-
-        # Reward parameters
-        self.DISTANCE_PENALTY = 0.5
-        self.GOAL_REWARD = 1000
-        self.OBSTACLE_PENALTY = 100
-        self.MOVEMENT_PENALTY = 1
-        self.GAUSSIAN_REWARD_SCALE = 2
+        self.MAX_VEL = [0.2, np.pi/2]
+        self.HOME = [-1, 0]
         
         if 'DDPG' in args.policy:
             self.TIME_DELTA = 1/5.8
@@ -55,9 +42,31 @@ class GazeboEnv:
         else:
             pass
 
+        # Trajectory sin
+        x_min, x_max = -1, 1        # Define the range along x
+        num_points = 10000          # Number of reference points
+        self.A = 0.5                # Amplitude of the sinusoid
+        self.omega = 2 * np.pi      # Frequency of the sinusoid
+
+        x_points = np.linspace(x_min, x_max, num_points)
+        y_points = self.A * np.sin(self.omega * x_points)
+        self.traj_points = np.column_stack((x_points, y_points))
+
+        '''# Trajectory eight
+        t = np.linspace(0, 2 * np.pi, num_points)
+        x_points = self.A * np.sin(t)
+        y_points = self.A * np.sin(t) * np.cos(t)  # Lemniscate-style figure-eight
+        self.traj_points = np.column_stack((x_points, y_points))'''
+
+        #self._init_trajectory()
+
+        self.sigma = 0.05
+        self.min_dist = 0.2
+
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
         self._initialize_ros()
+        self.set_position()
 
         print("START TRAINING...\n")
     
@@ -81,8 +90,13 @@ class GazeboEnv:
 
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
-        state_dim = 6
-        self.action_dim = 2
+        if args.policy == "SAC":
+            state_dim = kwargs["num_inputs"]
+            self.action_dim = kwargs["action_space"].shape[0]
+        else:
+            state_dim = kwargs["state_dim"]
+            self.action_dim = kwargs["action_dim"]
+
         buffer_size = int(1e5)
 
         if 'DDPG' in args.policy:
@@ -102,12 +116,12 @@ class GazeboEnv:
     def _init_parameters(self, args):
         # Parameters
         self.args = args
-        self.dt = 1 / 30
+        self.dt = 1 / 100
 
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
-        self.max_time = 20
+        self.max_time = 30
         self.max_episode = 400
         self.max_count = 150
         self.expl_noise = args.expl_noise
@@ -140,6 +154,33 @@ class GazeboEnv:
         self.move_flag = False
         self.rotation_flag = True
 
+    def _init_trajectory(self):
+        waypoints = np.array([
+            [-0.9, -0.9],   # Bottom-left corner
+            [0, -0.5],
+            [0.9, 0],
+            [0, 0.9],
+            [-0.5, 0.5],
+            [-0.8, 0],
+            [-0.9,-0.9]
+        ])
+
+        # Use chord-length parameterization for a better spacing along the track
+        distances = np.sqrt(np.sum(np.diff(waypoints, axis=0)**2, axis=1))
+        t_waypoints = np.concatenate(([0], np.cumsum(distances)))
+        t_waypoints /= t_waypoints[-1]  # Normalize to [0, 1]
+
+        # Create periodic cubic splines for x and y coordinates
+        cs_x = CubicSpline(t_waypoints, waypoints[:, 0], bc_type='periodic')
+        cs_y = CubicSpline(t_waypoints, waypoints[:, 1], bc_type='periodic')
+
+        # Sample a dense set of points along the track
+        num_points = 10000
+        t_dense = np.linspace(0, 1, num_points)
+        x_points = cs_x(t_dense)
+        y_points = cs_y(t_dense)
+        self.traj_points = np.column_stack((x_points, y_points))
+
     def load_model(self, args):
         '''Load a pre-trained model'''
         if args.load_model:
@@ -169,6 +210,39 @@ class GazeboEnv:
         pkl.dump(p_actor, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'wb'))
         pkl.dump(p_critic, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'wb'))
 
+    def euler_xyz_to_quaternion(self, phi_deg, theta_deg, psi_deg):
+        """
+        Convert Euler angles (XYZ order) in degrees to quaternion [x, y, z, w].
+
+        Args:
+            phi_deg (float): Rotation around X-axis (roll) in degrees.
+            theta_deg (float): Rotation around Y-axis (pitch) in degrees.
+            psi_deg (float): Rotation around Z-axis (yaw) in degrees.
+
+        Returns:
+            list: Quaternion [x, y, z, w]
+        """
+        # Convert to radians
+        roll = np.deg2rad(phi_deg)
+        pitch = np.deg2rad(theta_deg)
+        yaw = np.deg2rad(psi_deg)
+
+        # Compute half angles
+        cr = np.cos(roll / 2)
+        sr = np.sin(roll / 2)
+        cp = np.cos(pitch / 2)
+        sp = np.sin(pitch / 2)
+        cy = np.cos(yaw / 2)
+        sy = np.sin(yaw / 2)
+
+        # XYZ rotation order
+        qx = sr * cp * cy - cr * sp * sy
+        qy = cr * sp * cy + sr * cp * sy
+        qz = cr * cp * sy - sr * sp * cy
+        qw = cr * cp * cy + sr * sp * sy
+
+        return qx, qy, qz, qw
+
     def set_position(self):
         rospy.wait_for_service('/gazebo/set_model_state')
         # Create a service proxy
@@ -184,11 +258,12 @@ class GazeboEnv:
         state_msg.pose.position.y = self.HOME[1]  # new y position
         state_msg.pose.position.z = 0.0  # new z position, typically 0 for ground robots
         
-        # Orientation as a quaternion (x, y, z, w). Here it's set to no rotation.
+        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, 60)
+        # Orientation as a quaternion (x, y, z, w).
         state_msg.pose.orientation.x = 0.0
         state_msg.pose.orientation.y = 0.0
-        state_msg.pose.orientation.z = 0.0
-        state_msg.pose.orientation.w = 1.0
+        state_msg.pose.orientation.z = qz
+        state_msg.pose.orientation.w = qw
         
         # Optionally, define the twist (velocity); here we set it to zero.
         state_msg.twist.linear.x = 0.0
@@ -204,13 +279,23 @@ class GazeboEnv:
         # Call the service with the message
         resp = set_state(state_msg)
 
-    def odom(self):
-        """Extract state information from odometry message"""
-        # Robot position
-        x = self.msg.pose.pose.position.x #+ self.HOME[0]
-        y = self.msg.pose.pose.position.y #+ self.HOME[1]
+    def normalize_angle(self, angle):
+        """Normalize angle to the range [-pi, pi]."""
+        while angle > np.pi:
+            angle -= 2.0 * np.pi
+        while angle < -np.pi:
+            angle += 2.0 * np.pi
+        return angle
+    
+    def get_state(self):
+        """Extract state information from odometry message and compute features relative to the track circuit."""
+        # --- Extract Pose and Velocities ---
+        # Robot position (global)
+        x = self.msg.pose.pose.position.x  
+        y = self.msg.pose.pose.position.y  
         self.x, self.y = x, y
-        # Get orientation
+        
+        # Orientation (yaw)
         quaternion = (
             self.msg.pose.pose.orientation.x,
             self.msg.pose.pose.orientation.y,
@@ -220,43 +305,24 @@ class GazeboEnv:
         euler = tf.transformations.euler_from_quaternion(quaternion)
         yaw = euler[2]
         self.theta = yaw
-        
-        # Robot velocities
+
+        # Velocities
         linear_vel = self.msg.twist.twist.linear.x
-        vel_x = linear_vel * np.cos(yaw)
-        vel_y = linear_vel * np.sin(yaw)
         angular_vel = self.msg.twist.twist.angular.z
-        
-        #self.state = np.array([x, y, yaw, vel_x, vel_y, angular_vel])
 
-        # Compute distance to goal
-        dx = self.GOAL[0] - x
-        dy = self.GOAL[1] - y
-        distance = np.linalg.norm([dx, dy])
-        
-        # Compute the angle from the robot to the goal
-        goal_angle = np.arctan2(dy, dx)
-        
-        # Compute the relative heading error (normalize to [-pi, pi])
-        e_theta_g = (yaw - goal_angle + np.pi) % (2 * np.pi) - np.pi
-        
-        # Compute speed in the direction toward the goal (projection of velocity onto goal direction)
-        v_g = vel_x * np.cos(goal_angle) + vel_y * np.sin(goal_angle)
-        
-        # Compute lateral (sideways) velocity (component perpendicular to the goal direction)
-        v_perp = -vel_x * np.sin(goal_angle) + vel_y * np.cos(goal_angle)
+        y_ref = self.A * np.sin(self.omega * x)
+        lateral_error = y - y_ref
+        dy_dx = self.A * self.omega * np.cos(self.omega * x)
+        desired_heading = np.arctan2(dy_dx, 1.0)
+        heading_error = self.normalize_angle(yaw - desired_heading)
 
-        # Compute distance to obstacle (assuming obstacle is at the origin)
-        d_obs = np.linalg.norm([x, y])
-        
-        # Create the processed state vector
-        self.state = np.array([distance, e_theta_g, v_g, v_perp, angular_vel, d_obs])
-    
+        self.state = np.array([x, lateral_error, heading_error, angular_vel])
+
     def publish_velocity(self, action):
         # Publish velocity commands to the robot
         vel_msg = Twist()
-        vel_msg.linear.x = action[0] * self.MAX_VEL[0]
-        vel_msg.angular.z = action[1] * self.MAX_VEL[1]
+        vel_msg.linear.x = self.MAX_VEL[0] #- 0.1 * action[0]
+        vel_msg.angular.z = action[0] * self.MAX_VEL[1]
         self.cmd_vel_pub.publish(vel_msg)
 
     def reset(self):
@@ -265,49 +331,49 @@ class GazeboEnv:
         vel_msg.linear.x = 0
         vel_msg.angular.z = 0
         self.cmd_vel_pub.publish(vel_msg)
-        # Change initila position
-        r = np.sqrt(np.random.uniform(0,1))*0.1
-        theta = np.random.uniform(0,2*np.pi)
-        self.HOME = np.array([-1 + r * np.cos(theta), 0 + r * np.sin(theta)])
+        
         # Set the position
         self.set_position()
         #self.reset_world()
         rospy.sleep(0.5)
 
     def get_reward(self):
+        """
+        Compute a shaped reward by combining:
+        - A Gaussian proximity reward along the trajectory.
+        - A progress reward based on the increase in the x coordinate.
+        - Penalties for lateral and heading errors.
+        The episode terminates if the robot deviates too far laterally.
+        """
+        # --- Calculate dist to traj---
+        robot_pos = np.array([self.x, self.y])
+        dists = np.linalg.norm(self.traj_points - robot_pos, axis=1)
+        
+        # Smooth Gaussian reward 04_08
+        d_min = np.min(dists)
+        '''gaussian_reward = np.exp(-d_min**2 / (2 * self.sigma**2))
+        progress = self.x + 1
+        reward = gaussian_reward + progress'''
 
-        next_distance = self.state[0]
-        
-        goal_threshold = self.GOAL_DIST   # Distance below which the goal is considered reached (meters)
-        goal_reward = 100.0   # Reward bonus for reaching the goal
-        
-        # New penalty constants for abnormal events:
-        boundary_penalty = -25.0   # Penalty for leaving the allowed area
-        collision_penalty = -50.0 # Penalty for colliding with the obstacle
-        
-        # Check if the goal is reached
-        if next_distance < goal_threshold:
-            #print("WIN")
-            return goal_reward, True, True
-        
-        # Check boundary violation:
-        if np.abs(self.x) >= 1.2 or np.abs(self.y) >= 1.2:
-            #print("DANGER ZONE")
-            return boundary_penalty, True, False
-        
-        # Check collision with obstacle:
-        if np.abs(self.x) <= self.OBST_D / 2 and np.abs(self.y) <= self.OBST_W / 2:
-            #print("COLLISION")
-            return collision_penalty, True, False
-        
-        if self.old_state is not None:
-            distance = self.old_state[0]
-            delta_d = distance - next_distance
-            reward = 2 if delta_d > 0.01 else -1
+        # New reward test 04_09
+        reward = -np.abs(self.state[1]) - 2*np.abs(self.state[2]) + (self.state[0] + 1)
+
+        target = np.clip((self.state[0] + 1) / 2, 0, 1)
+
+        # --- Safety Termination Criteria ---
+        if d_min > self.min_dist:
+            reward -= 2.0
+            done = True
+            return reward, done, target
+
+        # --- Target Achievement Condition ---
+        if self.x > 0.95 and np.abs(self.y) < 0.1:
+            #reward += 100.0 
+            done = True
         else:
-            reward = 0
-        
-        return reward, False, False
+            done = False
+
+        return reward, done, target
 
     def train(self):
 
@@ -321,26 +387,26 @@ class GazeboEnv:
         else:
             action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
 
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        #a_in = [(action[0] + 1)/ 2, action[1]]
+        self.publish_velocity(action)
 
         if self.timestep > 1e3:
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
             rospy.sleep(self.TIME_DELTA)
-        else:
-            rospy.sleep(self.TIME_DELTA)
+        '''else:
+            rospy.sleep(self.TIME_DELTA)'''
 
         reward, done, target = self.get_reward()
         self.episode_reward += reward
 
-        '''elapsed_time = rospy.get_time() - self.episode_time
+        elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
             done = True
+        
+        '''if self.count > self.max_count:
+            done = True'''
 
-        if self.old_state is not None:
+        if self.old_state is not None and self.episode_num > 1:
             self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
 
         # Update state and action
@@ -352,14 +418,15 @@ class GazeboEnv:
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} sec")
             self.reset()
             if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
 
             # Save training data
             self.training_reward.append(self.episode_reward)
-            self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            #self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            self.training_suc.append(target)
             np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
             np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
 
@@ -383,28 +450,30 @@ class GazeboEnv:
             self.episode_time = rospy.get_time()
 
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        
+        self.publish_velocity(action)
 
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
 
-        '''elapsed_time = rospy.get_time() - self.episode_time
+        elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
             done = True
+        
+        '''if self.count > self.max_count:
+            done = True'''
 
         self.count += 1
         self.old_state = None if done else self.state
         self.old_action = None if done else action
 
         if done:
-            self.suc += int(target)      # Increment suc if target is True (1)
-            self.col += int(not target)  # Increment col if target is False (0)
+            '''self.suc += int(target)      # Increment suc if target is True (1)
+            self.col += int(not target)  # Increment col if target is False (0)'''
+            self.suc += target
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
+
+            print(f"Evaluation: {self.e + 1} - Average Reward: {self.avrg_reward / (self.e + 1):.1f} - Steps: {self.count} - Target: {target:.2f} - Time: {self.episode_time:.1f} sec")
             
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []
@@ -422,7 +491,7 @@ class GazeboEnv:
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} % - TIME UP: {(1-avrg_col-avrg_suc)*100:.0f} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Successes: {avrg_suc*100} %")
                 print("-" * 50)
 
                 self.evaluations_reward.append(self.avrg_reward)
@@ -440,14 +509,10 @@ class GazeboEnv:
                 self. e = 0
                 self.epoch +=1
 
-    def come(self):
-        # TODO: Implement come logic here
-        pass
-
     def callback(self, msg):
         # Update the state
         self.msg = msg
-        self.odom()
+        self.get_state()
 
         # Check if we have exceeded the maximum number of episodes
         if self.episode_num > self.max_episode + 1:

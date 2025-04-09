@@ -268,22 +268,19 @@ class RealEnv():
 
         # New reward test 04_09
         reward = -np.abs(self.state[1]) - 2*np.abs(self.state[2]) + (self.state[0] + 1)
+        target = np.clip((self.state[0] + 1) / 2, 0, 1)
 
         # --- Safety Termination Criteria ---
         if d_min > self.min_dist:
             reward -= 2.0
             done = True
-            target = False
             return reward, done, target
 
         # --- Target Achievement Condition ---
         if self.x > 0.95 and np.abs(self.y) < 0.1:
-            reward += 100.0 
             done = True
-            target = True
         else:
             done = False
-            target = False
 
         return reward, done, target
 
@@ -313,10 +310,11 @@ class RealEnv():
         self.old_action = None if done else action
 
         if done:
-            self.suc += int(target)
-            self.col += int(not target)
+            #self.suc += int(target)
+            #self.col += int(not target)
+            self.suc += target
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target:.2f} - Time: {self.episode_time:.1f} sec")
             
             self.all_trajectories.append(np.array(self.trajectory))
             self.trajectory = []

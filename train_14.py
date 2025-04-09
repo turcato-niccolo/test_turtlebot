@@ -39,11 +39,11 @@ class RealEnv():
         else:
             pass
         
+        self._init_trajectory()
         self.args = args
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
         self._initialize_ros()
-        self._init_trajectory()
 
         print("START TRAINING...\n")
 
@@ -191,8 +191,7 @@ class RealEnv():
         # --- Extract Pose and Velocities ---
         # Robot position (global)
         x = self.msg.pose.pose.position.x  
-        y = self.msg.pose.pose.position.y  
-        self.x, self.y = x, y
+        y = self.msg.pose.pose.position.y
         
         # Orientation (yaw)
         quaternion = (
@@ -201,9 +200,10 @@ class RealEnv():
             self.msg.pose.pose.orientation.z,
             self.msg.pose.pose.orientation.w
         )
+        x , y = self.homogeneous_transformation([x, y])
         yaw = self.yaw_from_quaternion(quaternion) - np.pi/2
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
-        self.theta = yaw
+        self.x, self.y, self.theta = x, y, yaw
 
         # Velocities
         linear_vel = self.msg.twist.twist.linear.x
@@ -221,6 +221,20 @@ class RealEnv():
         '''Publish velocity commands to the robot'''
         v = self.MAX_VEL[0]
         w = action[0] * self.MAX_VEL[1]
+        
+        d = 0.173
+        r = 0.0325
+
+        w_r = (v + w * d/2) / r
+        w_l = (v - w * d/2) / r
+        vel_msg = Vector3(w_r, w_l, 0)
+
+        self.cmd_vel_pub.publish(vel_msg)
+
+    def publish_velocity_normal(self, action):
+        '''Publish velocity commands to the robot'''
+        v = action[0] * 0.5
+        w = action[1] * np.pi/4
         
         d = 0.173
         r = 0.0325
@@ -254,21 +268,19 @@ class RealEnv():
         # New reward test 04_09
         reward = -np.abs(self.state[1]) - 2*np.abs(self.state[2]) + (self.state[0] + 1)
 
+        target = np.clip((self.state[0] + 1) / 2, 0, 1)
+
         # --- Safety Termination Criteria ---
         if d_min > self.min_dist:
             reward -= 2.0
             done = True
-            target = False
             return reward, done, target
 
         # --- Target Achievement Condition ---
         if self.x > 0.95 and np.abs(self.y) < 0.1:
-            reward += 100.0 
             done = True
-            target = True
         else:
             done = False
-            target = False
 
         return reward, done, target
 
@@ -317,12 +329,13 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
             if self.expl_noise > 0.05:
                 self.expl_noise = self.expl_noise - ((0.1 - 0.05) / 50)
             
             self.training_reward.append(self.episode_reward)
-            self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            #self.training_suc.append(1) if target is True else self.training_suc.append(0)
+            self.training_suc.append(target)
             self.training_time.append(self.episode_time)
             np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
             np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
@@ -382,10 +395,11 @@ class RealEnv():
         self.old_action = None if done else action
 
         if done:
-            self.suc += int(target)
-            self.col += int(not target)
+            #self.suc += int(target)
+            #self.col += int(not target)
+            self.suc += target
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target} - Time: {self.episode_time:.1f} sec")
+            print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target:.2f} - Time: {self.episode_time:.1f} sec")
             
             self.evaluations_time.append(self.episode_time) if target is True else self.evaluations_time.append(0)
             self.all_trajectories.append(np.array(self.trajectory))
@@ -439,9 +453,9 @@ class RealEnv():
             
             if abs(angle_to_goal - self.theta) > 0.05:
                 angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
-                self.publish_velocity([0, angular_speed])
+                self.publish_velocity_normal([0, angular_speed])
             else:
-                self.publish_velocity([0, 0])
+                self.publish_velocity_normal([0, 0])
                 self.move_flag = True
                 self.rotation_flag = False
 
@@ -483,12 +497,12 @@ class RealEnv():
             angular_speed = np.clip(1.0 * angle_error, -1.0, 1.0)
                 
             if distance < 0.05:  # Stop condition
-                self.publish_velocity([0, 0])
+                self.publish_velocity_normal([0, 0])
                 self.move_flag = False
                 self.rotation_flag = True
                 self.stop_flag = True
             else:
-                self.publish_velocity([linear_speed, angular_speed])
+                self.publish_velocity_normal([linear_speed, angular_speed])
 
     def callback(self, msg):
         # Update the state
