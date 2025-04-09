@@ -58,8 +58,8 @@ class RealEnv():
     
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
-        state_dim = 6
-        self.action_dim = 2
+        state_dim = 4
+        self.action_dim = 1
         buffer_size = int(1e5)
 
         if 'DDPG' in args.policy:
@@ -187,8 +187,7 @@ class RealEnv():
         # --- Extract Pose and Velocities ---
         # Robot position (global)
         x = self.msg.pose.pose.position.x  
-        y = self.msg.pose.pose.position.y  
-        self.x, self.y = x, y
+        y = self.msg.pose.pose.position.y
         
         # Orientation (yaw)
         quaternion = (
@@ -199,7 +198,8 @@ class RealEnv():
         )
         yaw = self.yaw_from_quaternion(quaternion) + 2.8381249
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
-        self.theta = yaw
+        
+        self.x, self.y, self.theta = x, y, yaw
 
         # Velocities
         linear_vel = self.msg.twist.twist.linear.x
