@@ -84,7 +84,7 @@ class RealEnv():
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
-        self.max_time = 20
+        self.max_time = 30
         self.max_episode = 100
         self.max_count = 150
         self.max_timesteps = 1
@@ -247,7 +247,7 @@ class RealEnv():
         reward = gaussian_reward + progress'''
 
         # New reward test 04_09
-        reward = -np.abs(self.state[1]) - np.abs(self.state[2]) + (self.state[0] + 1)
+        reward = -np.abs(self.state[1]) - 2*np.abs(self.state[2]) + (self.state[0] + 1)
 
         # --- Safety Termination Criteria ---
         if d_min > self.min_dist:
@@ -363,12 +363,12 @@ class RealEnv():
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
 
-        '''elapsed_time = rospy.get_time() - self.episode_time
+        elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
             done = True
+        
+        '''if self.count > self.max_count:
+            done = True'''
 
         if self.epoch == 0 and self.old_state is not None:
             self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
