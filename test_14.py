@@ -229,6 +229,20 @@ class RealEnv():
 
         self.cmd_vel_pub.publish(vel_msg)
 
+    def publish_velocity_normal(self, action):
+        '''Publish velocity commands to the robot'''
+        v = action[0] * self.MAX_VEL[0]
+        w = action[1] * self.MAX_VEL[1]
+        
+        d = 0.173
+        r = 0.0325
+
+        w_r = (v + w * d/2) / r
+        w_l = (v - w * d/2) / r
+        vel_msg = Vector3(w_r, w_l, 0)
+
+        self.cmd_vel_pub.publish(vel_msg)
+
     def reset(self):
         '''Stop an change the initial position of the robot'''
         self.publish_velocity([0, 0])
@@ -350,9 +364,9 @@ class RealEnv():
             
             if abs(angle_to_goal - self.theta) > 0.05:
                 angular_speed = min(2.0 * (angle_to_goal - self.theta), 2.0)
-                self.publish_velocity([0, angular_speed])
+                self.publish_velocity_normal([0, angular_speed])
             else:
-                self.publish_velocity([0, 0])
+                self.publish_velocity_normal([0, 0])
                 self.move_flag = True
                 self.rotation_flag = False
 
@@ -394,12 +408,12 @@ class RealEnv():
             angular_speed = np.clip(1.0 * angle_error, -1.0, 1.0)
                 
             if distance < 0.05:  # Stop condition
-                self.publish_velocity([0, 0])
+                self.publish_velocity_normal([0, 0])
                 self.move_flag = False
                 self.rotation_flag = True
                 self.stop_flag = True
             else:
-                self.publish_velocity([linear_speed, angular_speed])
+                self.publish_velocity_normal([linear_speed, angular_speed])
 
     def callback(self, msg):
         # Update the state
