@@ -500,7 +500,7 @@ class GazeboEnv:
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
-
+                self.save_model_params()
 
                 self.all_trajectories = []
                 self.avrg_reward = 0
