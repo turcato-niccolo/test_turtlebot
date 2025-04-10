@@ -140,8 +140,8 @@ class RealEnv():
     def load_model_params(self, args):
         '''Load model parameters from file'''
         if args.load_model:
-            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb'))
-            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_critic.pkl', 'rb'))
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/19_actor.pkl', 'rb'))
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/19_critic.pkl', 'rb'))
 
             if 'TD3' in args.policy or 'ExpD3' in args.policy or 'DDPG' in args.policy:
                 # For these algorithms, the actor is stored in self.policy.actor
@@ -158,7 +158,7 @@ class RealEnv():
             else:
                 raise NotImplementedError("Policy {} not implemented".format(args.policy))
         
-            print(f"Model loaded successfully from: ./runs/models_params/{self.args.policy}/seed{self.args.seed}/")
+            print(f"Model loaded successfully from: ./runs/models_params/{self.args.policy}/seed{self.args.seed}/19")
 
     def yaw_from_quaternion(self, q):
         x, y, z, w = q
