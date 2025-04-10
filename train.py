@@ -29,7 +29,7 @@ class GazeboEnv:
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
 
-        self.MAX_VEL = [0.2, np.pi/2]
+        self.MAX_VEL = [0.5, np.pi/2]
         self.HOME = [-1, 0]
         
         if 'DDPG' in args.policy:
@@ -217,7 +217,7 @@ class GazeboEnv:
         state_msg.pose.position.y = self.HOME[1]  # new y position
         state_msg.pose.position.z = 0.0  # new z position, typically 0 for ground robots
         
-        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, 60)
+        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, 180)
         # Orientation as a quaternion (x, y, z, w).
         state_msg.pose.orientation.x = 0.0
         state_msg.pose.orientation.y = 0.0
@@ -338,8 +338,8 @@ class GazeboEnv:
         else:
             action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
 
-        #a_in = [(action[0] + 1)/ 2, action[1]]
-        self.publish_velocity(action)
+        a_in = [(action[0] + 1)/ 2, action[1]]
+        self.publish_velocity(a_in)
 
         if self.timestep > 1e3:
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
@@ -401,8 +401,8 @@ class GazeboEnv:
             self.episode_time = rospy.get_time()
 
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        
-        self.publish_velocity(action)
+        a_in = [(action[0] + 1)/ 2, action[1]]
+        self.publish_velocity(a_in)
 
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
