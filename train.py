@@ -28,6 +28,7 @@ class GazeboEnv:
         self.old_state = None
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
+        self.linear_vel, self.angular_vel = 0, 0
 
         self.MAX_VEL = [0.5, np.pi/2]
         self.HOME = [-1, 0]
@@ -105,7 +106,7 @@ class GazeboEnv:
         self.batch_size = args.batch_size
 
         self.max_time = 30
-        self.max_episode = 400
+        self.max_episode = 400 *3
         self.max_count = 150
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
@@ -217,7 +218,8 @@ class GazeboEnv:
         state_msg.pose.position.y = self.HOME[1]  # new y position
         state_msg.pose.position.z = 0.0  # new z position, typically 0 for ground robots
         
-        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, 180)
+        angle = np.random.uniform(-180, 180)
+        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, angle)
         # Orientation as a quaternion (x, y, z, w).
         state_msg.pose.orientation.x = 0.0
         state_msg.pose.orientation.y = 0.0
@@ -255,35 +257,35 @@ class GazeboEnv:
         self.laser_data = raw_ranges[indices]
         self.min_dist = np.min(self.laser_data)
 
-        self.state = np.concatenate((self.forward_laser_data, [self.linear_vel, self.angular_vel]))
+        self.state = np.concatenate((self.laser_data, [self.linear_vel, self.angular_vel]))
 
-    def odom_callback(self):
+    def odom_callback(self, msg):
         """Extract state information from odometry message and compute features relative to the track circuit."""
         # --- Extract Pose and Velocities ---
         # Robot position
-        x = self.msg.pose.pose.position.x  
-        y = self.msg.pose.pose.position.y  
+        x = msg.pose.pose.position.x  
+        y = msg.pose.pose.position.y  
         
         # Orientation (yaw)
         quaternion = (
-            self.msg.pose.pose.orientation.x,
-            self.msg.pose.pose.orientation.y,
-            self.msg.pose.pose.orientation.z,
-            self.msg.pose.pose.orientation.w
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
         )
         euler = tf.transformations.euler_from_quaternion(quaternion)
         yaw = euler[2]
         self.x, self.y, self.theta = x, y, yaw
 
         # Velocities
-        self.linear_vel = self.msg.twist.twist.linear.x
-        self.angular_vel = self.msg.twist.twist.angular.z
+        self.linear_vel = msg.twist.twist.linear.x
+        self.angular_vel = msg.twist.twist.angular.z
 
     def publish_velocity(self, action):
         # Publish velocity commands to the robot
         vel_msg = Twist()
-        vel_msg.linear.x = self.MAX_VEL[0] #- 0.1 * action[0]
-        vel_msg.angular.z = action[0] * self.MAX_VEL[1]
+        vel_msg.linear.x = action[0] * self.MAX_VEL[0] #- 0.1 * action[0]
+        vel_msg.angular.z = action[1] * self.MAX_VEL[1]
         self.cmd_vel_pub.publish(vel_msg)
 
     def reset(self):
@@ -310,7 +312,7 @@ class GazeboEnv:
 
     def get_reward(self):
         # Compute the reward based on the robot's state and action
-        collision_penalty = -100
+        collision_penalty = -5
         done = False
         target = False
 
@@ -321,8 +323,8 @@ class GazeboEnv:
             target = False
             return collision_penalty, done, target
         
-        r3 = lambda x: 1 - x if x < 0.2 else 0.0
-        reward = self.linear_vel / 2 - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
+        r3 = lambda x: 1 - x if x < 0.5 else 0.0
+        reward = 3*self.linear_vel - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
 
         return reward, done, target
 
@@ -343,17 +345,18 @@ class GazeboEnv:
 
         if self.timestep > 1e3:
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
-            rospy.sleep(self.TIME_DELTA)
+            #rospy.sleep(self.TIME_DELTA)
         '''else:
             rospy.sleep(self.TIME_DELTA)'''
 
-        reward, done, target = self.get_reward()
+        reward, done, _ = self.get_reward()
         self.episode_reward += reward
 
         elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
             done = True
-        
+            
+        target = elapsed_time / self.max_time
         '''if self.count > self.max_count:
             done = True'''
 
@@ -404,13 +407,14 @@ class GazeboEnv:
         a_in = [(action[0] + 1)/ 2, action[1]]
         self.publish_velocity(a_in)
 
-        reward, done, target = self.get_reward()
+        reward, done, _ = self.get_reward()
         self.avrg_reward += reward
 
         elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
             done = True
-        
+
+        target = elapsed_time / self.max_time
         '''if self.count > self.max_count:
             done = True'''
 
@@ -442,7 +446,7 @@ class GazeboEnv:
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Successes: {avrg_suc*100} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Successes: {avrg_suc*100:.2f} %")
                 print("-" * 50)
 
                 self.evaluations_reward.append(self.avrg_reward)
@@ -479,7 +483,7 @@ class GazeboEnv:
             self.train()
         elif self.evaluate_flag:
             self.evaluate()
-            rospy.sleep(self.TIME_DELTA)
+            #rospy.sleep(self.TIME_DELTA)
 
 
 # TODO: Metriche da aggiungere:
