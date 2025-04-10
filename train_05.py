@@ -59,7 +59,7 @@ class RealEnv():
     
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
-        state_dim = 6
+        state_dim = 4
         self.action_dim = 2
         buffer_size = int(1e5)
 
