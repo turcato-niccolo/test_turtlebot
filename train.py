@@ -3,17 +3,18 @@ import numpy as np
 import rospy
 import os
 
-from algorithms import ExpD3
-from algorithms import OurDDPG
 from algorithms import TD3
 from algorithms import SAC
+from algorithms import ExpD3
+from algorithms import OurDDPG
 
-from nav_msgs.msg import Odometry
-from std_srvs.srv import Empty
-from geometry_msgs.msg import Twist
-from gazebo_msgs.srv import SetModelState
-from gazebo_msgs.msg import ModelState
 import tf.transformations
+from std_srvs.srv import Empty
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+from gazebo_msgs.msg import ModelState
+from gazebo_msgs.srv import SetModelState
 
 from scipy.interpolate import CubicSpline
 
@@ -41,27 +42,7 @@ class GazeboEnv:
             self.TIME_DELTA = 1/8
         else:
             pass
-
-        # Trajectory sin
-        x_min, x_max = -1, 1        # Define the range along x
-        num_points = 10000          # Number of reference points
-        self.A = 0.5                # Amplitude of the sinusoid
-        self.omega = 2 * np.pi      # Frequency of the sinusoid
-
-        x_points = np.linspace(x_min, x_max, num_points)
-        y_points = self.A * np.sin(self.omega * x_points)
-        self.traj_points = np.column_stack((x_points, y_points))
-
-        '''# Trajectory eight
-        t = np.linspace(0, 2 * np.pi, num_points)
-        x_points = self.A * np.sin(t)
-        y_points = self.A * np.sin(t) * np.cos(t)  # Lemniscate-style figure-eight
-        self.traj_points = np.column_stack((x_points, y_points))'''
-
-        #self._init_trajectory()
-
-        self.sigma = 0.05
-        self.min_dist = 0.2
+        
 
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
@@ -82,7 +63,9 @@ class GazeboEnv:
         self.reset()
 
         # Initialize odometry subscriber
-        rospy.Subscriber('/odom', Odometry, self.callback, queue_size=1)                    # Initialize odometry subscriber
+        rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)                    # Initialize odometry subscriber
+        # Subscribe to the laser scan topic (sensor_msgs/LaserScan) with a dedicated callback
+        rospy.Subscriber('/scan', LaserScan, self.callback, queue_size=1)
 
         self.reset_simulation()
         self.unpause()
@@ -147,39 +130,15 @@ class GazeboEnv:
         self.col = 0
         self.e = 0
 
+        # Lidar params
+        self.num_points = 8
+
         self.train_flag = True
         self.evaluate_flag = False
         self.come_flag = False
 
         self.move_flag = False
         self.rotation_flag = True
-
-    def _init_trajectory(self):
-        waypoints = np.array([
-            [-0.9, -0.9],   # Bottom-left corner
-            [0, -0.5],
-            [0.9, 0],
-            [0, 0.9],
-            [-0.5, 0.5],
-            [-0.8, 0],
-            [-0.9,-0.9]
-        ])
-
-        # Use chord-length parameterization for a better spacing along the track
-        distances = np.sqrt(np.sum(np.diff(waypoints, axis=0)**2, axis=1))
-        t_waypoints = np.concatenate(([0], np.cumsum(distances)))
-        t_waypoints /= t_waypoints[-1]  # Normalize to [0, 1]
-
-        # Create periodic cubic splines for x and y coordinates
-        cs_x = CubicSpline(t_waypoints, waypoints[:, 0], bc_type='periodic')
-        cs_y = CubicSpline(t_waypoints, waypoints[:, 1], bc_type='periodic')
-
-        # Sample a dense set of points along the track
-        num_points = 10000
-        t_dense = np.linspace(0, 1, num_points)
-        x_points = cs_x(t_dense)
-        y_points = cs_y(t_dense)
-        self.traj_points = np.column_stack((x_points, y_points))
 
     def load_model(self, args):
         '''Load a pre-trained model'''
@@ -287,13 +246,23 @@ class GazeboEnv:
             angle += 2.0 * np.pi
         return angle
     
-    def get_state(self):
+    def laser_scan(self):
+        """
+        Process the LaserScan message and extract the laser data.
+        """
+        raw_ranges = np.array(self.msg.ranges)
+        indices = np.linspace(0, len(raw_ranges)-1, num=self.num_points, dtype=int)
+        self.laser_data = raw_ranges[indices]
+        self.min_dist = np.min(self.laser_data)
+
+        self.state = np.concatenate((self.forward_laser_data, [self.linear_vel, self.angular_vel]))
+
+    def odom_callback(self):
         """Extract state information from odometry message and compute features relative to the track circuit."""
         # --- Extract Pose and Velocities ---
-        # Robot position (global)
+        # Robot position
         x = self.msg.pose.pose.position.x  
         y = self.msg.pose.pose.position.y  
-        self.x, self.y = x, y
         
         # Orientation (yaw)
         quaternion = (
@@ -304,19 +273,11 @@ class GazeboEnv:
         )
         euler = tf.transformations.euler_from_quaternion(quaternion)
         yaw = euler[2]
-        self.theta = yaw
+        self.x, self.y, self.theta = x, y, yaw
 
         # Velocities
-        linear_vel = self.msg.twist.twist.linear.x
-        angular_vel = self.msg.twist.twist.angular.z
-
-        y_ref = self.A * np.sin(self.omega * x)
-        lateral_error = y - y_ref
-        dy_dx = self.A * self.omega * np.cos(self.omega * x)
-        desired_heading = np.arctan2(dy_dx, 1.0)
-        heading_error = self.normalize_angle(yaw - desired_heading)
-
-        self.state = np.array([x, lateral_error, heading_error, angular_vel])
+        self.linear_vel = self.msg.twist.twist.linear.x
+        self.angular_vel = self.msg.twist.twist.angular.z
 
     def publish_velocity(self, action):
         # Publish velocity commands to the robot
@@ -331,6 +292,16 @@ class GazeboEnv:
         vel_msg.linear.x = 0
         vel_msg.angular.z = 0
         self.cmd_vel_pub.publish(vel_msg)
+
+        while True:
+            # Uniformly sample x and y between -0.8 and 0.8
+            x = np.random.uniform(-0.8, 0.8)
+            y = np.random.uniform(-0.8, 0.8)
+            
+            # Check if the point falls inside the forbidden inner square.
+            if not (-0.5 < x < 0.5 and -0.5 < y < 0.5):
+                self.HOME = [x, y]
+                break
         
         # Set the position
         self.set_position()
@@ -338,40 +309,20 @@ class GazeboEnv:
         rospy.sleep(0.5)
 
     def get_reward(self):
-        """
-        Compute a shaped reward by combining:
-        - A Gaussian proximity reward along the trajectory.
-        - A progress reward based on the increase in the x coordinate.
-        - Penalties for lateral and heading errors.
-        The episode terminates if the robot deviates too far laterally.
-        """
-        # --- Calculate dist to traj---
-        robot_pos = np.array([self.x, self.y])
-        dists = np.linalg.norm(self.traj_points - robot_pos, axis=1)
+        # Compute the reward based on the robot's state and action
+        collision_penalty = -100
+        done = False
+        target = False
+
+        # Check collision with obstacle:
+        if self.min_dist < 0.2:
+            #print("COLLISION")
+            done = True
+            target = False
+            return collision_penalty, done, target
         
-        # Smooth Gaussian reward 04_08
-        d_min = np.min(dists)
-        '''gaussian_reward = np.exp(-d_min**2 / (2 * self.sigma**2))
-        progress = self.x + 1
-        reward = gaussian_reward + progress'''
-
-        # New reward test 04_09
-        reward = -np.abs(self.state[1]) - 2*np.abs(self.state[2]) + (self.state[0] + 1)
-
-        target = np.clip((self.state[0] + 1) / 2, 0, 1)
-
-        # --- Safety Termination Criteria ---
-        if d_min > self.min_dist:
-            reward -= 2.0
-            done = True
-            return reward, done, target
-
-        # --- Target Achievement Condition ---
-        if self.x > 0.95 and np.abs(self.y) < 0.1:
-            #reward += 100.0 
-            done = True
-        else:
-            done = False
+        r3 = lambda x: 1 - x if x < 0.2 else 0.0
+        reward = self.linear_vel / 2 - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
 
         return reward, done, target
 
@@ -512,7 +463,7 @@ class GazeboEnv:
     def callback(self, msg):
         # Update the state
         self.msg = msg
-        self.get_state()
+        self.laser_scan()
 
         # Check if we have exceeded the maximum number of episodes
         if self.episode_num > self.max_episode + 1:
