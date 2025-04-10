@@ -161,7 +161,7 @@ class GazeboEnv:
             pass
 
     def save_model_params(self):
-        actor_params = self.policy.actor.parameters()
+        actor_params = self.policy.actor.parameters() if self.args.policy != 'SAC' else self.policy.policy.parameters()
         critic_params = self.policy.critic.parameters()
         
         p_actor = [l.cpu().detach().numpy() for l in actor_params]

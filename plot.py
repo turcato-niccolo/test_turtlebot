@@ -1,38 +1,29 @@
 # %%
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+import matplotlib.patches as patches
 from matplotlib.gridspec import GridSpec
 
 # Create images directory if it doesn't exist
 os.makedirs("./images", exist_ok=True)
 
-# Define the algorithms, seeds, and selected epochs to plot
+# Define algorithms, seeds, and epochs to plot
 algorithms = ["TD3", "DDPG", "SAC"]
 seeds = [0, 1, 2, 3]
-selected_epochs = [4, 9, 14, 19]  # Only select specific epochs
+selected_epochs = [4, 9, 14, 19, 24, 29, 34, 39]
 
-# Create the benchmark trajectory (sinusoidal)
-x_min, x_max = -1, 1
-num_points = 10000
-A = 0.5
-omega = 2 * np.pi
-x_points = np.linspace(x_min, x_max, num_points)
-y_points = A * np.sin(omega * x_points)
-benchmark_trajectory = np.column_stack((x_points, y_points))
+# Define a list of colors for the epochs (make sure the list length matches the number of epochs)
+color_list = ['blue', 'green', 'orange', 'red', 'purple', 'brown', 'cyan', 'magenta']
 
-# Define colors for each epoch
-epoch_colors = {
-    4: 'blue',
-    9: 'green',
-    14: 'orange',
-    19: 'red'
-}
+# Use a for loop to create a dictionary mapping each epoch to its corresponding color
+epoch_colors = {}
+for epoch, color in zip(selected_epochs, color_list):
+    epoch_colors[epoch] = color
 
-# Create separate figure for each algorithm with subplots for seeds and epochs
+# Create a separate figure for each algorithm with subplots for seeds and epochs
 for algo in algorithms:
     # Create a grid figure with seeds as rows and epochs as columns
-    # Inverted from previous version
     fig, axes = plt.subplots(len(seeds), len(selected_epochs), 
                             figsize=(18, 12), sharex=True, sharey=True)
     
@@ -41,9 +32,20 @@ for algo in algorithms:
         for epoch_idx, epoch in enumerate(selected_epochs):
             ax = axes[seed_idx, epoch_idx]
             
-            # Add the benchmark trajectory
-            ax.plot(benchmark_trajectory[:, 0], benchmark_trajectory[:, 1], 
-                    'k--', linewidth=1.5, alpha=0.5, label='Benchmark')
+            # Add the obstacles
+            # Smaller obstacle: filled grey square with side length 0.6 (centered at 0,0)
+            small_side = 0.6
+            small_obs = patches.Rectangle((-small_side/2, -small_side/2), 
+                                          small_side, small_side, 
+                                          facecolor='grey', alpha=0.5, edgecolor='grey')
+            # Larger obstacle: grey outlined square with side length 2 (centered at 0,0)
+            big_side = 2.0
+            big_obs = patches.Rectangle((-big_side/2, -big_side/2), 
+                                        big_side, big_side, 
+                                        facecolor='none', edgecolor='grey', 
+                                        linestyle='--', linewidth=2)
+            ax.add_patch(small_obs)
+            ax.add_patch(big_obs)
             
             # Construct the path to the trajectory file
             traj_file = f"./runs/trajectories/{algo}/seed{seed}/{epoch}_trajectories.npz"
@@ -67,10 +69,11 @@ for algo in algorithms:
                 print(f"Error processing {traj_file}: {e}")
                 ax.text(0, 0, f"Error", ha='center', va='center')
             
-            # Set grid and limits
+            # Set grid, limits, and aspect ratio
             ax.set_xlim(-1, 1)
             ax.set_ylim(-1, 1)
             ax.grid(True, linestyle='--', alpha=0.3)
+            ax.set_aspect('equal')
             
             # Add labels and titles as needed
             if epoch_idx == 0:
@@ -80,20 +83,16 @@ for algo in algorithms:
             if seed_idx == len(seeds) - 1:
                 ax.set_xlabel("X Position", fontsize=10)
     
-    # Set equal aspect ratio for all subplots
-    for ax in axes.flat:
-        ax.set_aspect('equal')
-    
     # Add a single legend for the benchmark
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', ncol=1, bbox_to_anchor=(0.5, 0.98), fontsize=12)
     
-    # Add epoch color legend
+    # Add epoch color legend for the robot trajectories
     legend_elements = [plt.Line2D([0], [0], color=color, lw=4, label=f'Epoch {epoch}')
                       for epoch, color in epoch_colors.items()]
     fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.99, 0.98), fontsize=10)
     
-    # Adjust layout
+    # Adjust layout to prevent overlapping elements
     plt.tight_layout()
     fig.subplots_adjust(top=0.92, hspace=0.25, wspace=0.15)
     
@@ -106,8 +105,8 @@ for algo in algorithms:
     print(f"Saved figure to {save_path}")
     
     # Show the plot
-    plt.show()
     plt.close()
+
 
 # %%
 import numpy as np
@@ -242,6 +241,5 @@ fig.subplots_adjust(top=0.90)
 # Save and show
 plt.savefig("./images/algorithm_comparison.png", dpi=300, bbox_inches='tight')
 print("Plot saved as ./images/algorithm_comparison.png")
-plt.show()
 
 
