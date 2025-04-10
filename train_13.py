@@ -179,6 +179,14 @@ class RealEnv():
 
         return transformed_vec[0], transformed_vec[1]
 
+    def normalize_angle(self, angle):
+        """Normalize angle to the range [-pi, pi]."""
+        while angle > np.pi:
+            angle -= 2.0 * np.pi
+        while angle < -np.pi:
+            angle += 2.0 * np.pi
+        return angle
+
     def get_state(self):
         """Extract state information from odometry message and compute features relative to the track circuit."""
         # --- Extract Pose and Velocities ---
