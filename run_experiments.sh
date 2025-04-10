@@ -1,9 +1,9 @@
 #!/bin/bash
 
-algorithms=("TD3")
+algorithms=("TD3" "DDPG" "SAC")
 
 for algo in "${algorithms[@]}"; do
-    for seed in {0..0}; do
+    for seed in {0..3}; do
         if [ "$algo" == "SAC" ]; then
             expl_noise=0.0
         else

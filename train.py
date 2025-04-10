@@ -106,7 +106,7 @@ class GazeboEnv:
         self.batch_size = args.batch_size
 
         self.max_time = 30
-        self.max_episode = 400 *3
+        self.max_episode = 800
         self.max_count = 150
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
