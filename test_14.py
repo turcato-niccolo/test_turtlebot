@@ -334,7 +334,7 @@ class RealEnv():
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Successes: {avrg_suc*100} %")
                 print("-" * 50)
 
                 # Save evaluation results

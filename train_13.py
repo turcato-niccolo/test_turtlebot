@@ -291,8 +291,7 @@ class RealEnv():
         else:
             action = np.random.uniform(-self.max_action, self.max_action,size=self.action_dim)
 
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        self.publish_velocity(action)
 
         if self.timestep > self.max_timesteps:
             train_time = rospy.get_time()
@@ -369,8 +368,8 @@ class RealEnv():
             self.episode_time = rospy.get_time()
 
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        
+        self.publish_velocity(action)
 
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
@@ -415,7 +414,7 @@ class RealEnv():
                 avrg_suc = self.suc / self.eval_ep
 
                 print("-" * 50)
-                print(f"Average Reward: {self.avrg_reward:.2f} - Collisions: {avrg_col*100} % - Successes: {avrg_suc*100} %")
+                print(f"Average Reward: {self.avrg_reward:.2f} - Successes: {avrg_suc*100} %")
                 print("-" * 50)
 
                 # Save evaluation results

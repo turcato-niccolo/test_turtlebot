@@ -46,7 +46,7 @@ def parse_args():
     '''action_low = np.array([-1, -1], dtype=np.float32)  # Lower bounds
     action_high = np.array([1, 1], dtype=np.float32)   # Upper bounds
     action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float32)'''
-    action_space = CustomBox(low=[-1, -1], high=[1, 1]) if action_dim > 1 else CustomBox(low=-1, high=1)
+    action_space = CustomBox(low=[-1, -1], high=[1, 1]) if action_dim > 1 else CustomBox(low=[-1], high=[1])
     max_action = float(1)
 
     if args.policy == "SAC":

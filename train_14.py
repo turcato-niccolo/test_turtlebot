@@ -139,8 +139,8 @@ class RealEnv():
     def load_model_params(self, args):
         '''Load model parameters from file'''
         if args.load_model:
-            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_actor.pkl', 'rb'))
-            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/9_critic.pkl', 'rb'))
+            actor_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/19_actor.pkl', 'rb'))
+            critic_params = pkl.load(open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/19_critic.pkl', 'rb'))
 
             if 'TD3' in args.policy or 'ExpD3' in args.policy or 'DDPG' in args.policy:
                 # For these algorithms, the actor is stored in self.policy.actor
@@ -374,8 +374,8 @@ class RealEnv():
             self.episode_time = rospy.get_time()
 
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
-        a_in = [(action[0] + 1 ) / 2, action[1]]
-        self.publish_velocity(a_in)
+        
+        self.publish_velocity(action)
 
         reward, done, target = self.get_reward()
         self.avrg_reward += reward
