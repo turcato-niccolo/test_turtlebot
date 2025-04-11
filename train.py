@@ -32,6 +32,7 @@ class GazeboEnv:
 
         self.MAX_VEL = [0.5, np.pi/2]
         self.HOME = [-1, 0]
+        self.angle = 0
         
         if 'DDPG' in args.policy:
             self.TIME_DELTA = 1/5.8
@@ -58,7 +59,7 @@ class GazeboEnv:
         # Initialize ROS node and publishers
         rospy.init_node('environment', anonymous=True)                                      # Initialize ROS node
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-        self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
+        self.unpause = rospy.ServiceProxy('/gazebo/unpause_pself.HOME[1]sics', Empty)
         self.reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)                 # Initialize simulation reset service
         self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset()
@@ -218,8 +219,7 @@ class GazeboEnv:
         state_msg.pose.position.y = self.HOME[1]  # new y position
         state_msg.pose.position.z = 0.0  # new z position, typically 0 for ground robots
         
-        angle = np.random.uniform(-180, 180)
-        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, angle)
+        qx, qy, qz, qw = self.euler_xyz_to_quaternion(0, 0, self.angle)
         # Orientation as a quaternion (x, y, z, w).
         state_msg.pose.orientation.x = 0.0
         state_msg.pose.orientation.y = 0.0
@@ -304,6 +304,17 @@ class GazeboEnv:
             if not (-0.5 < x < 0.5 and -0.5 < y < 0.5):
                 self.HOME = [x, y]
                 break
+
+        if self.HOME[1] > self.HOME[0] and self.HOME[1] > -self.HOME[0]:
+            self.angle = np.random.choice([0, 180]) # Left quadrant
+        elif self.HOME[1] < self.HOME[0] and self.HOME[1] > -self.HOME[0]:
+            self.angle = np.random.choice([90, -90]) # Upper quadrant
+        elif self.HOME[1] < self.HOME[0] and self.HOME[1] < -self.HOME[0]:
+            self.angle = np.random.choice([0, 180])  # Right quadrant
+        elif self.HOME[1] > self.HOME[0] and self.HOME[1] < -self.HOME[0]:
+            self.angle = np.random.choice([-90, 90])  # Bottom quadrant
+        else:
+            self.angle = 0
         
         # Set the position
         self.set_position()
