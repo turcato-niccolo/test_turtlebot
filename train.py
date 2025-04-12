@@ -151,8 +151,8 @@ class GazeboEnv:
                 self.epoch = int(file_to_load.split("/")[-1])
 
                 if self.epoch != 0:
-                    self.evaluations_reward = np.load(f"./runs/results/{args.policy}/evaluations_reward_seed{args.seed}.npy").tolist()
-                    self.evaluations_suc = np.load(f"./runs/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
+                    self.evaluations_reward = np.load(f"./runs_task1/results/{args.policy}/evaluations_reward_seed{args.seed}.npy").tolist()
+                    self.evaluations_suc = np.load(f"./runs_task1/results/{args.policy}/evaluations_suc_seed{args.seed}.npy").tolist()
 
             self.policy.load(file_to_load)
             print(f"Model loaded: {file_to_load}")
@@ -160,14 +160,14 @@ class GazeboEnv:
             pass
 
     def save_model_params(self):
-        actor_params = self.policy.actor.parameters()
+        actor_params = self.policy.actor.parameters() if self.args.policy != 'SAC' else self.policy.policy.parameters()
         critic_params = self.policy.critic.parameters()
         
         p_actor = [l.cpu().detach().numpy() for l in actor_params]
         p_critic = [l.cpu().detach().numpy() for l in critic_params]   
         
-        pkl.dump(p_actor, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'wb'))
-        pkl.dump(p_critic, open(f'./runs/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'wb'))
+        pkl.dump(p_actor, open(f'./runs_task1/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_actor.pkl', 'wb'))
+        pkl.dump(p_critic, open(f'./runs_task1/models_params/{self.args.policy}/seed{self.args.seed}/{self.epoch}_critic.pkl', 'wb'))
 
     def set_position(self):
         rospy.wait_for_service('/gazebo/set_model_state')
@@ -360,8 +360,8 @@ class GazeboEnv:
             # Save training data
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(1) if target is True else self.training_suc.append(0)
-            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
-            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
+            np.save(f"./runs_task1/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
+            np.save(f"./runs_task1/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
 
             self.episode_reward = 0
             self.episode_timesteps = 0
@@ -427,10 +427,11 @@ class GazeboEnv:
 
                 self.evaluations_reward.append(self.avrg_reward)
                 self.evaluations_suc.append(avrg_suc)
-                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
-                np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
-                np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
-                self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
+                np.savez(f"./runs_task1/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
+                np.save(f"./runs_task1/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
+                np.save(f"./runs_task1/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
+                self.policy.save(f"./runs_task1/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
+                self.save_model_params()
 
 
                 self.all_trajectories = []
@@ -477,11 +478,11 @@ def main():
     print("\nRUNNING MAIN...")
     args, kwargs = parse_args()
     
-    os.makedirs("./runs/replay_buffers", exist_ok=True)
-    os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
-    os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
-    os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
-    os.makedirs(f"./runs/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs("./runs_task1/replay_buffers", exist_ok=True)
+    os.makedirs(f"./runs_task1/results/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs_task1/models/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs_task1/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
+    os.makedirs(f"./runs_task1/models_params/{args.policy}/seed{args.seed}", exist_ok=True)
     
     GazeboEnv(args, kwargs)
     rospy.spin()
