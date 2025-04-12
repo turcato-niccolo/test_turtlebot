@@ -383,7 +383,7 @@ def compare_left_right_paths_by_algorithm():
         # Get all trajectory files for this algorithm across all seeds
         all_files = []
         for seed in seeds:
-            trajectory_files = glob.glob(f"./runs/trajectories/{algorithm}/seed{seed}/*_trajectories.npz")
+            trajectory_files = glob.glob(f"./runs_task1/trajectories/{algorithm}/seed{seed}/*_trajectories.npz")
             if not trajectory_files:
                 continue
                 
@@ -418,7 +418,7 @@ def compare_left_right_paths_by_algorithm():
     plt.subplots_adjust(bottom=0.18)  # Make room for the legend at the bottom
     
     # Save the comparison
-    plt.savefig("./runs/images/trajectories_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig("./runs_task1/images/trajectories_comparison.png", dpi=300, bbox_inches='tight')
     
     return all_stats
 
@@ -435,15 +435,15 @@ def smooth_data(data, window_size=5):
 def plot_subplots(algorithm):
     """Plot performance metrics for a specific algorithm."""
     seeds = [0, 1, 2, 3] 
-    os.makedirs(f"./runs/images/{algorithm}", exist_ok=True)
+    os.makedirs(f"./runs_task1/images/{algorithm}", exist_ok=True)
 
     all_rewards = []
     all_success = []
     
     for seed in seeds:
         try:
-            data1 = np.load(f"runs/results/{algorithm}/evaluations_reward_seed{seed}.npy")
-            data2 = np.load(f"runs/results/{algorithm}/evaluations_suc_seed{seed}.npy")
+            data1 = np.load(f"runs_task1/results/{algorithm}/evaluations_reward_seed{seed}.npy")
+            data2 = np.load(f"runs_task1/results/{algorithm}/evaluations_suc_seed{seed}.npy")
             
             # Apply smoothing
             smoothed_reward = smooth_data(data1)
@@ -507,7 +507,7 @@ def plot_subplots(algorithm):
     
     plt.suptitle(f"Performance Metrics for {algorithm}", fontsize=16)
     plt.tight_layout()
-    plt.savefig(f"./runs/images/{algorithm}/performance.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"./runs_task1/images/{algorithm}/performance.png", dpi=300, bbox_inches='tight')
     plt.close()
 
 def plot_comparison(algorithms):
@@ -522,8 +522,8 @@ def plot_comparison(algorithms):
         
         for seed in seeds:
             try:
-                data1 = np.load(f"runs/results/{algo}/evaluations_reward_seed{seed}.npy")
-                data2 = np.load(f"runs/results/{algo}/evaluations_suc_seed{seed}.npy")
+                data1 = np.load(f"runs_task1/results/{algo}/evaluations_reward_seed{seed}.npy")
+                data2 = np.load(f"runs_task1/results/{algo}/evaluations_suc_seed{seed}.npy")
                 
                 # Apply smoothing
                 smoothed_reward = smooth_data(data1)
@@ -572,7 +572,7 @@ def plot_comparison(algorithms):
     
     plt.suptitle("Algorithm Performance Comparison", fontsize=16)
     plt.tight_layout()
-    plt.savefig(f"runs/images/algorithm_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"runs_task1/images/algorithm_comparison.png", dpi=300, bbox_inches='tight')
     plt.close()
 
 def plot_trajectory_grids_for_all(algorithms, seeds):
@@ -582,7 +582,7 @@ def plot_trajectory_grids_for_all(algorithms, seeds):
             print(f"Processing {algorithm} with seed {seed}...")
             
             # Sort files numerically by episode number
-            trajectory_files = glob.glob(f"./runs/trajectories/{algorithm}/seed{seed}/*_trajectories.npz")
+            trajectory_files = glob.glob(f"./runs_task1/trajectories/{algorithm}/seed{seed}/*_trajectories.npz")
             if not trajectory_files:
                 print(f"  No trajectory files found for {algorithm}/seed{seed}")
                 continue
@@ -595,8 +595,8 @@ def plot_trajectory_grids_for_all(algorithms, seeds):
                 trajectory_files = trajectory_files[:20]
             
             # Create save path for this algorithm and seed
-            os.makedirs(f"./runs/images/{algorithm}", exist_ok=True)
-            save_path = f"./runs/images/{algorithm}/seed{seed}_trajectory_grid.png"
+            os.makedirs(f"./runs_task1/images/{algorithm}", exist_ok=True)
+            save_path = f"./runs_task1/images/{algorithm}/seed{seed}_trajectory_grid.png"
             
             # Plot the grid
             plot_trajectory_grid(
@@ -613,7 +613,7 @@ def main():
     seeds = [0, 1, 2, 3]
     
     # Create necessary directories
-    os.makedirs("./runs/images", exist_ok=True)
+    os.makedirs("./runs_task1/images", exist_ok=True)
     
     # 1. Plot performance metrics for each algorithm
     for algo in algorithms:
