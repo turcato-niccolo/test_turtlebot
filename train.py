@@ -59,7 +59,7 @@ class GazeboEnv:
         # Initialize ROS node and publishers
         rospy.init_node('environment', anonymous=True)                                      # Initialize ROS node
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-        self.unpause = rospy.ServiceProxy('/gazebo/unpause_pself.HOME[1]sics', Empty)
+        #self.unpause = rospy.ServiceProxy('/gazebo/unpause_pself.HOME[1]sics', Empty)
         self.reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)                 # Initialize simulation reset service
         self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self.reset()
@@ -70,7 +70,7 @@ class GazeboEnv:
         rospy.Subscriber('/scan', LaserScan, self.callback, queue_size=1)
 
         self.reset_simulation()
-        self.unpause()
+        #self.unpause()
         print("ENV INIT...")
 
     def _initialize_rl(self, args, kwargs):
@@ -107,7 +107,7 @@ class GazeboEnv:
         self.batch_size = args.batch_size
 
         self.max_time = 30
-        self.max_episode = 800
+        self.max_episode = 600
         self.max_count = 150
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
@@ -297,11 +297,11 @@ class GazeboEnv:
 
         while True:
             # Uniformly sample x and y between -0.8 and 0.8
-            x = np.random.uniform(-0.8, 0.8)
-            y = np.random.uniform(-0.8, 0.8)
+            x = np.random.uniform(-0.7, 0.7)
+            y = np.random.uniform(-0.7, 0.7)
             
             # Check if the point falls inside the forbidden inner square.
-            if not (-0.5 < x < 0.5 and -0.5 < y < 0.5):
+            if not (-0.6 < x < 0.6 and -0.6 < y < 0.6):
                 self.HOME = [x, y]
                 break
 

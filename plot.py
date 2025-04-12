@@ -9,7 +9,7 @@ from matplotlib.gridspec import GridSpec
 os.makedirs("./images", exist_ok=True)
 
 # Define algorithms, seeds, and epochs to plot
-algorithms = ["TD3", "DDPG", "SAC"]
+algorithms = ["TD3", "DDPG", "SAC", "ExpD3"] 
 seeds = [0, 1, 2, 3]
 selected_epochs = [4, 9, 14, 19, 24, 29, 34, 39]
 
@@ -151,7 +151,7 @@ algo_seeds = {
     "DDPG": list(range(4)),   # Seeds 0 to 3
     "SAC": list(range(4)),    # Seeds 0 to 3
     "TD3": list(range(4)),     # Seeds 0 to 3
-    #"ExpD3": list(range(4))
+    "ExpD3": list(range(4))
 }
 
 # Define colors for each algorithm
@@ -159,7 +159,7 @@ algo_colors = {
     "DDPG": "blue",
     "SAC": "green",
     "TD3": "red",
-    #"ExpD3": "orange"
+    "ExpD3": "orange"
 }
 
 # Window size for smoothing

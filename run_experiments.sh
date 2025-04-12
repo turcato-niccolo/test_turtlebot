@@ -1,6 +1,6 @@
 #!/bin/bash
 
-algorithms=("TD3" "DDPG" "SAC")
+algorithms=("TD3" "DDPG" "ExpD3" "SAC")
 
 for algo in "${algorithms[@]}"; do
     for seed in {0..3}; do

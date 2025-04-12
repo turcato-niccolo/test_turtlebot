@@ -29,8 +29,8 @@ def parse_args():
     parser.add_argument("--entropy_factor", default=0., type=float)             # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--target_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
     parser.add_argument("--critic_estimations", default=1, type=int)            # Percentage to keep for bootstrap for Q functions
-    parser.add_argument("--OVER", default=2, type=float)
-    parser.add_argument("--UNDER", default=0.5, type=float)
+    parser.add_argument("--OVER", default=1.0, type=float)
+    parser.add_argument("--UNDER", default=1.0, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     args = parser.parse_args()
 
