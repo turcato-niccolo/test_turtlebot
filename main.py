@@ -30,7 +30,7 @@ if __name__ == "__main__":
     \n\n\n
     """)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
+    parser.add_argument("--policy", default="SAC")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--max_timesteps", default=1e3, type=int)   # Max time steps to run environment
     parser.add_argument("--batch_size", default=64, type=int)       # Batch size for both actor and critic
@@ -103,6 +103,10 @@ if __name__ == "__main__":
         raise NotImplementedError("Policy {} not implemented".format(args.policy))
 
     replay_buffer = utils.ReplayBuffer(state_dim, action_dim, max_size=10**4)
+
+    print('Policy: {}'.format(args.policy))
+    print('Batch Size: {}'.format(args.batch_size))
+    print('Hidden Size: {}'.format(args.hidden_size))
 
     # Evaluate untrained policy
 
