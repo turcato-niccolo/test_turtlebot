@@ -80,7 +80,6 @@ if __name__ == "__main__":
 			"target_update_interval": 2,          	# Frequency of target network updates
 			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
 			"hidden_size": args.hidden_size,        # Size of hidden layers
-			"lr": args.lr                           # Learning rate
 		}
     else:
         kwargs = {
@@ -110,7 +109,7 @@ if __name__ == "__main__":
     elif 'TD3' in args.policy:
         policy = TD3.TD3(**kwargs)
     elif 'SAC' in args.policy:
-        policy = SAC.SAC(kwargs["state_dim"], action_space)
+        policy = SAC.SAC(**kwargs)
     elif 'ExpD3' in args.policy:
         policy = ExpD3.DDPG(**kwargs)
     else:
