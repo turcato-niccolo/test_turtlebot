@@ -69,27 +69,41 @@ if __name__ == "__main__":
     action_space = CustomBox(low=[-1, -1], high=[1, 1])
     max_action = float(1)
 
-    kwargs = {
-        "state_dim": state_dim,
-        "action_dim": action_dim,
-        "max_action": max_action,
-        "batch_size": args.batch_size,
-        "hidden_size": args.hidden_size,
-        "discount": args.discount,
-        "tau": args.tau,
-        "policy_noise": args.policy_noise * max_action,
-        "noise_clip": args.noise_clip * max_action,
-        "policy_freq": args.policy_freq,
-        "n_q": args.n_q,
-        "bootstrap": args.bootstrap,
-        "min_q": args.min_q > 0,
-        "entropy_decay": args.entropy_decay,
-        "entropy_factor": args.entropy_factor,
-        "target_estimations": args.target_estimations,
-        "critic_estimations": args.critic_estimations,
-        "OVER": args.OVER,
-        "UNDER": args.UNDER
-    }
+    if args.policy == "SAC":
+        kwargs = {
+			"num_inputs": state_dim,             	# The state dimension
+			"action_space": action_space,     	    # The action space object
+			"gamma": args.discount,               	# Discount factor
+			"tau": args.tau,                     	# Soft update parameter
+			"alpha": 0.2,                        	# Initial alpha for entropy
+			"policy": "Gaussian",                 	# Policy type (for SAC)
+			"target_update_interval": 2,          	# Frequency of target network updates
+			"automatic_entropy_tuning": True,     	# Automatic entropy tuning
+			"hidden_size": args.hidden_size,        # Size of hidden layers
+			"lr": args.lr                           # Learning rate
+		}
+    else:
+        kwargs = {
+            "state_dim": state_dim,
+            "action_dim": action_dim,
+            "max_action": max_action,
+            "batch_size": args.batch_size,
+            "hidden_size": args.hidden_size,
+            "discount": args.discount,
+            "tau": args.tau,
+            "policy_noise": args.policy_noise * max_action,
+            "noise_clip": args.noise_clip * max_action,
+            "policy_freq": args.policy_freq,
+            "n_q": args.n_q,
+            "bootstrap": args.bootstrap,
+            "min_q": args.min_q > 0,
+            "entropy_decay": args.entropy_decay,
+            "entropy_factor": args.entropy_factor,
+            "target_estimations": args.target_estimations,
+            "critic_estimations": args.critic_estimations,
+            "OVER": args.OVER,
+            "UNDER": args.UNDER
+        }
 
     if 'DDPG' in args.policy:
         policy = OurDDPG.DDPG(**kwargs)
