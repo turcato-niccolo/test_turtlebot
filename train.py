@@ -16,8 +16,6 @@ from sensor_msgs.msg import LaserScan
 from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 
-from scipy.interpolate import CubicSpline
-
 from utils import ReplayBuffer
 from config import parse_args
 
