@@ -313,12 +313,12 @@ class RealEnv():
         reward, done, target = self.get_reward()
         self.episode_reward += reward
 
-        '''elapsed_time = rospy.get_time() - self.episode_time
+        elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
-            done = True'''
-        
-        if self.count > self.max_count:
             done = True
+        
+        '''if self.count > self.max_count:
+            done = True'''
 
         if self.old_state is not None:
             self.replay_buffer.add(self.old_state, self.old_action, self.state, reward, float(done))
