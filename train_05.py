@@ -436,7 +436,7 @@ class RealEnv():
                 angular_speed = angle_target - angle_min
                 linear_speed = 0
             
-        self.publish_velocity([1*linear_speed, 1*angular_speed])
+        self.publish_velocity([1*linear_speed/self.MAX_VEL[0], 1*angular_speed/self.MAX_VEL[1]])
 
 
 
