@@ -208,15 +208,9 @@ class RealEnv():
         self.linear_vel = (w_r + w_l) * r / 2
  
     def publish_velocity(self, action):
-        # Publish velocity commands to the robot
-        vel_msg = Twist()
-        vel_msg.linear.x = action[0] * self.MAX_VEL[0]
-        vel_msg.angular.z = action[1] * self.MAX_VEL[1]
-        self.cmd_vel_pub.publish(vel_msg)
-
         '''Publish velocity commands to the robot'''
-        v = action[0] * 0.5
-        w = action[1] * np.pi/4
+        v = action[0] * self.MAX_VEL[0]
+        w = action[1] * self.MAX_VEL[1]
         
         d = 0.173
         r = 0.0325
