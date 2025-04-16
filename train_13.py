@@ -28,6 +28,8 @@ class RealEnv():
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
         self.linear_vel, self.angular_vel = 0, 0
+        self.laser_scan = None
+        self.raw_ranges = None
 
         self.MAX_VEL = [0.5, np.pi/2]
         self.HOME = [-1, 0]
@@ -48,30 +50,19 @@ class RealEnv():
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
         self._initialize_ros()
-        self.set_position()
+        #self.set_position()
 
         print("START TRAINING...\n")
 
     def _initialize_ros(self):
-        '''# Initialize ROS node and publishers
-        rospy.init_node('robot_trainer', anonymous=True)                                        # Initialize ROS node
-        self.cmd_vel_pub = rospy.Publisher('/turtlebot_13/cmd_wheels', Vector3, queue_size=1)   # Initialize velocity publisher
-        # Initialize odometry subscriber
-        rospy.Subscriber('/turtlebot_13/odom', Odometry, self.callback, queue_size=1)           # Initialize odometry subscriber
-        self.reset()'''
-
         # Initialize ROS node and publishers
-        rospy.init_node('environment', anonymous=True)                                      # Initialize ROS node
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-        #self.unpause = rospy.ServiceProxy('/gazebo/unpause_pself.HOME[1]sics', Empty)
-        self.reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)                 # Initialize simulation reset service
-        self.reset_simulation = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
-        self.reset()
-
+        rospy.init_node('robot_trainer', anonymous=True)                                        # Initialize ROS node
+        self.cmd_vel_pub = rospy.Publisher('/turtlebot_05/cmd_wheels', Vector3, queue_size=1)   # Initialize velocity publisher
         # Initialize odometry subscriber
-        rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)                    # Initialize odometry subscriber
-        # Subscribe to the laser scan topic (sensor_msgs/LaserScan) with a dedicated callback
-        rospy.Subscriber('/scan', LaserScan, self.callback, queue_size=1)
+        rospy.Subscriber('/turtlebot_05/wheelSpeeds', Vector3, self.odom_callback, queue_size=1)           # Initialize odometry subscriber
+        rospy.Subscriber('/turtlebot_05/scan', LaserScan, self.callback, queue_size=1)
+
+        self.reset()
 
         self.reset_simulation()
         
@@ -196,35 +187,28 @@ class RealEnv():
         """
         Process the LaserScan message and extract the laser data.
         """
-        raw_ranges = np.array(self.msg.ranges)
-        indices = np.linspace(0, len(raw_ranges)-1, num=self.num_points, dtype=int)
-        self.laser_data = raw_ranges[indices]
+        self.raw_ranges = np.array(self.msg.ranges)
+        indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
+        self.laser_data = self.raw_ranges[indices]
         self.min_dist = np.min(self.laser_data)
 
         self.state = np.concatenate((self.laser_data, [self.linear_vel, self.angular_vel]))
 
     def odom_callback(self, msg):
         """Extract state information from odometry message and compute features relative to the track circuit."""
-        # --- Extract Pose and Velocities ---
-        # Robot position
-        x = msg.pose.pose.position.x  
-        y = msg.pose.pose.position.y  
-        
-        # Orientation (yaw)
-        quaternion = (
-            msg.pose.pose.orientation.x,
-            msg.pose.pose.orientation.y,
-            msg.pose.pose.orientation.z,
-            msg.pose.pose.orientation.w
-        )
-        euler = tf.transformations.euler_from_quaternion(quaternion)
-        yaw = euler[2]
-        self.x, self.y, self.theta = x, y, yaw
+
+        data = msg.data
+        w_r = data[0]
+        w_l = data[1]
+
+        d = 0.173
+        r = 0.0325
+
 
         # Velocities
-        self.linear_vel = msg.twist.twist.linear.x
-        self.angular_vel = msg.twist.twist.angular.z
-
+        self.angular_vel = (w_r - w_l) * r / d
+        self.linear_vel = (w_r + w_l) * r / 2
+ 
     def publish_velocity(self, action):
         # Publish velocity commands to the robot
         vel_msg = Twist()
@@ -270,6 +254,9 @@ class RealEnv():
 
     def train(self):
         '''Training function'''
+
+        self.trajectory.append(self.state)
+
         if self.count == 0:
             self.episode_time = rospy.get_time()
 
@@ -314,9 +301,9 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
-            if self.expl_noise > 0.1:
-                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+            print(f"Episode: {self.episode_num} - Reepisode_timeward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
+            if self.expl_noise > 0.05:
+                self.expl_noise = self.expl_noise - ((0.1 - 0.05) / 50)
             
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(target)
@@ -324,15 +311,17 @@ class RealEnv():
             np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
             np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
             np.save(f"./runs/results/{self.args.policy}/training_time_seed{self.args.seed}", self.training_time)
+            np.save(f"./runs/results/{self.args.policy}/training_trajectory_seed{self.args.seed}_{self.episode_num}", self.trajectory)
 
             # Reset episode variables
             self.episode_reward = 0
             self.episode_timesteps = 0
+            self.trajectory = []
             self.count = 0
             self.reset()
 
             # Check if it's time for evaluation (after this episode)
-            if self.episode_num % self.eval_freq == 0:
+            if self.episode_num > self.max_episode:
                 print("-" * 80)
                 print(f"VALIDATING - EPOCH {self.epoch + 1}")
                 print("-" * 80)
@@ -352,7 +341,7 @@ class RealEnv():
 
     def evaluate(self):
         '''Evaluation function'''
-        self.trajectory.append([self.x, self.y])
+        self.trajectory.append(self.state)
 
         if self.count == 0:
             self.episode_time = rospy.get_time()
@@ -388,7 +377,8 @@ class RealEnv():
             print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target:.2f} - Time: {self.episode_time:.1f} sec")
             
             self.evaluations_time.append(self.episode_time) if target is True else self.evaluations_time.append(0)
-            self.all_trajectories.append(np.array(self.trajectory))
+
+            np.save(f"./runs/results/{self.args.policy}/evaluations_trajectory_seed{self.args.seed}_{self.eval_ep}", self.trajectory)
             self.trajectory = []
             
             self.e += 1
@@ -412,8 +402,6 @@ class RealEnv():
                 # Save evaluation results
                 self.evaluations_reward.append(self.avrg_reward)
                 self.evaluations_suc.append(avrg_suc)
-                np.savez(f"./runs/trajectories/{self.args.policy}/seed{self.args.seed}/{self.epoch}_trajectories.npz", 
-                        **{f"traj{idx}": traj for idx, traj in enumerate(self.all_trajectories)})
                 np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
                 np.save(f"./runs/results/{self.args.policy}/evaluations_time_seed{self.args.seed}", self.evaluations_time)
@@ -426,8 +414,40 @@ class RealEnv():
                     pkl.dump(self.replay_buffer, f)
 
                 # Reset for next evaluation cycle
-                self.all_trajectories = []
                 self.epoch += 1
+
+    def come(self):
+        index = np.argmin(self.raw_ranges)
+        min_dist = np.min(self.raw_ranges)
+        angle_increment = 0.01745329238474369
+
+        if min_dist > 0.4:
+            angle_min = -np.pi + angle_increment * index
+            angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
+            
+            if np.abs(angle_target-angle_min) < 0.05:
+                angular_speed = 0
+                linear_speed = 0
+                self.train_flag = True
+                self.come_flag = False
+            else:
+                angular_speed = angle_target - angle_min
+                linear_speed = 0
+        else:
+            angle_min = -np.pi + angle_increment * index
+            angle_target = np.pi if angle_min > 0 else -np.pi
+
+            if np.abs(angle_target-angle_min) < 0.05:
+                angular_speed = 0
+                linear_speed = 0.80 - min_dist
+            else:
+                angular_speed = angle_target - angle_min
+                linear_speed = 0
+            
+        self.publish_velocity([1*linear_speed, 1*angular_speed])
+
+
+
 
     def come(self):
         '''Come state logic'''
