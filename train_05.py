@@ -196,10 +196,8 @@ class RealEnv():
 
     def odom_callback(self, msg):
         """Extract state information from odometry message and compute features relative to the track circuit."""
-
-        data = msg.data
-        w_r = data[0]
-        w_l = data[1]
+        w_r = msg.x
+        w_l = msg.y
 
         d = 0.173
         r = 0.0325
