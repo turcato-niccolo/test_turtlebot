@@ -303,7 +303,7 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reepisode_timeward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
             if self.expl_noise > 0.3:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
             
@@ -454,7 +454,7 @@ class RealEnv():
                 self.train_flag = True
                 self.come_flag = False
 
-        self.publish_velocity([1.0*linear_speed/self.MAX_VEL[0], 1.0*angular_speed/self.MAX_VEL[1]])
+        self.publish_velocity([np.clip(1.0*linear_speed/self.MAX_VEL[0], 0, 1), 1.0*angular_speed/self.MAX_VEL[1]])
 
     def callback(self, msg):
         # Update the state
