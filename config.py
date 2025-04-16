@@ -39,7 +39,7 @@ def parse_args():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    state_dim = 10
+    state_dim = 10 + 8
     action_dim = 2
 
     # Define the action bounds

@@ -30,7 +30,7 @@ class RealEnv():
         self.linear_vel, self.angular_vel = 0, 0
         
         # Lidar params
-        self.num_points = 8
+        self.num_points = 8*2
         self.laser_data = None
         self.raw_ranges = None
 
@@ -71,8 +71,13 @@ class RealEnv():
     
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
-        state_dim = 10
-        self.action_dim = 2
+        if args.policy == "SAC":
+            state_dim = kwargs["num_inputs"]
+            self.action_dim = kwargs["action_space"].shape[0]
+        else:
+            state_dim = kwargs["state_dim"]
+            self.action_dim = kwargs["action_dim"]
+
         buffer_size = int(1e5)
 
         if 'DDPG' in args.policy:
@@ -235,9 +240,10 @@ class RealEnv():
         collision_penalty = -5
         done = False
         target = False
+        min_dist = np.min(self.raw_ranges)
 
         # Check collision with obstacle:
-        if self.min_dist < 0.2:
+        if min_dist < 0.2:
             #print("COLLISION")
             done = True
             target = False
@@ -430,8 +436,6 @@ class RealEnv():
             if np.abs(angle_target-angle_min) < 0.1 or min_dist >= 0.3:
                 self.rotation_flag = False
                 self.move_flag = True
-        
-        
         elif self.move_flag:
             #print("MOVE")
             linear_speed = 0.35 - self.raw_ranges[0]
@@ -439,8 +443,6 @@ class RealEnv():
             if self.raw_ranges[0] > 0.3:
                 self.move_flag = False
                 self.align_flag = True
-            
-
         elif self.align_flag:
             #print("ALIGN")
             angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
@@ -452,37 +454,6 @@ class RealEnv():
                 self.train_flag = True
                 self.come_flag = False
 
-        """
-        if min_dist > 0.30:
-            angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
-            
-            if np.abs(angle_target-angle_min) < 0.1:
-                print("done")
-                angular_speed = 0
-                linear_speed = 0
-                self.train_flag = True
-                self.come_flag = False
-            else:
-                angular_speed = angle_target - angle_min
-                linear_speed = 0
-                print("align corrido")
-        else:
-            
-            angular_speed = 0
-            linear_speed = 0.35 - min_dist
-        
-            if np.abs(angle_target-angle_min) >= 0.05 and min_dist < 0.2:
-                angle_target = np.pi if angle_min > 0 else -np.pi
-                angular_speed = angle_target - angle_min
-                linear_speed = 0
-                print("align perp")
-            #elif np.abs(angle_target-angle_min) < 0.05:
-            else:
-                angular_speed = 0
-                linear_speed = 0.35 - min_dist 
-                print("goto center")
-            #else:
-        """
         self.publish_velocity([1.0*linear_speed/self.MAX_VEL[0], 1.0*angular_speed/self.MAX_VEL[1]])
 
     def callback(self, msg):
