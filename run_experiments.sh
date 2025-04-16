@@ -1,16 +1,16 @@
 #!/bin/bash
 
-algorithms=("TD3" "DDPG" "ExpD3" "SAC")
+algorithms=("TD3")
 
 for algo in "${algorithms[@]}"; do
-    for seed in {0..3}; do
+    for seed in {0..0}; do
         if [ "$algo" == "SAC" ]; then
             expl_noise=0.0
         else
             expl_noise=0.3
         fi
 
-        python3 train.py \
+        python3 train_05.py \
             --policy "$algo" \
             --hidden_size 64 \
             --batch_size 128 \

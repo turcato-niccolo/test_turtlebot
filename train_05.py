@@ -34,7 +34,7 @@ class RealEnv():
         self.laser_data = None
         self.raw_ranges = None
 
-        self.MAX_VEL = [0.5, np.pi/2]
+        self.MAX_VEL = [0.35, np.pi/2]
         self.HOME = [-1, 0]
         self.angle = 0
         
@@ -71,8 +71,8 @@ class RealEnv():
     
     def _initialize_rl(self, args, kwargs):
         '''Initialize the RL algorithm'''
-        state_dim = 4
-        self.action_dim = 1
+        state_dim = 10
+        self.action_dim = 2
         buffer_size = int(1e5)
 
         if 'DDPG' in args.policy:
@@ -93,13 +93,15 @@ class RealEnv():
         # Parameters
         self.dt = 1 / 100
 
+        self.args = args
+
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
         self.max_time = 30
         self.max_episode = 100
         self.max_count = 150
-        self.max_timesteps = 1
+        self.max_timesteps = 200
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
 
@@ -124,6 +126,7 @@ class RealEnv():
         # Initialize flags for state management
         self.train_flag = False
         self.evaluate_flag = False
+        self.align_flag = False
         self.stop_flag = False
         self.come_flag = True
         self.move_flag = False
@@ -188,7 +191,7 @@ class RealEnv():
         """
         Process the LaserScan message and extract the laser data.
         """
-        self.raw_ranges = np.array(self.msg.ranges)
+        self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
         self.min_dist = np.min(self.laser_data)
@@ -212,7 +215,7 @@ class RealEnv():
         '''Publish velocity commands to the robot'''
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
-        
+        #print(v, w)
         d = 0.173
         r = 0.0325
 
@@ -413,12 +416,48 @@ class RealEnv():
         index = np.argmin(self.raw_ranges)
         min_dist = np.min(self.raw_ranges)
         angle_increment = 0.01745329238474369
+        angle_min = np.pi - angle_increment * index
+        #print(f"angle min: {angle_min}")
+        #print(f"index: {index}")
+        #print(f"min dist: {min_dist}")
+        #angular_speed = linear_speed = 0
 
+        if self.rotation_flag:
+            #print("ROT")
+            angle_target = np.pi if angle_min > 0 else -np.pi
+            angular_speed = angle_target - angle_min
+            linear_speed = 0.01
+            if np.abs(angle_target-angle_min) < 0.1 or min_dist >= 0.3:
+                self.rotation_flag = False
+                self.move_flag = True
+        
+        
+        elif self.move_flag:
+            #print("MOVE")
+            linear_speed = 0.35 - self.raw_ranges[0]
+            angular_speed = 0
+            if self.raw_ranges[0] > 0.3:
+                self.move_flag = False
+                self.align_flag = True
+            
+
+        elif self.align_flag:
+            #print("ALIGN")
+            angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
+            angular_speed = angle_target - angle_min
+            linear_speed = 0
+            if np.abs(angle_target-angle_min) < 0.05:
+                self.rotation_flag = True
+                self.move_flag = False
+                self.train_flag = True
+                self.come_flag = False
+
+        """
         if min_dist > 0.30:
-            angle_min = -np.pi + angle_increment * index
             angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
             
-            if np.abs(angle_target-angle_min) < 0.05:
+            if np.abs(angle_target-angle_min) < 0.1:
+                print("done")
                 angular_speed = 0
                 linear_speed = 0
                 self.train_flag = True
@@ -426,18 +465,25 @@ class RealEnv():
             else:
                 angular_speed = angle_target - angle_min
                 linear_speed = 0
+                print("align corrido")
         else:
-            angle_min = -np.pi + angle_increment * index
-            angle_target = np.pi if angle_min > 0 else -np.pi
-
-            if np.abs(angle_target-angle_min) < 0.05:
-                angular_speed = 0
-                linear_speed = 0.35 - min_dist
-            else:
+            
+            angular_speed = 0
+            linear_speed = 0.35 - min_dist
+        
+            if np.abs(angle_target-angle_min) >= 0.05 and min_dist < 0.2:
+                angle_target = np.pi if angle_min > 0 else -np.pi
                 angular_speed = angle_target - angle_min
                 linear_speed = 0
-            
-        self.publish_velocity([1*linear_speed/self.MAX_VEL[0], 1*angular_speed/self.MAX_VEL[1]])
+                print("align perp")
+            #elif np.abs(angle_target-angle_min) < 0.05:
+            else:
+                angular_speed = 0
+                linear_speed = 0.35 - min_dist 
+                print("goto center")
+            #else:
+        """
+        self.publish_velocity([1.0*linear_speed/self.MAX_VEL[0], 1.0*angular_speed/self.MAX_VEL[1]])
 
     def callback(self, msg):
         # Update the state
