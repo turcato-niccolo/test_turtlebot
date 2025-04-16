@@ -250,7 +250,7 @@ class RealEnv():
             return collision_penalty, done, target
         
         r3 = lambda x: 1 - x if x < 0.5 else 0.0
-        reward = 10*self.linear_vel - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
+        reward = 6*self.linear_vel - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
 
         return reward, done, target
 
@@ -304,8 +304,8 @@ class RealEnv():
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - T: {self.timestep} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
-            if self.expl_noise > 0.1:
-                self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
+            if self.expl_noise > 0.05:
+                self.expl_noise = self.expl_noise - ((0.3 - 0.05) / 100)
             
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(target)
@@ -326,7 +326,7 @@ class RealEnv():
             self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}")
 
             # Check if it's time for evaluation (after this episode)
-            if self.episode_num > self.max_episode:
+            '''if self.episode_num > self.max_episode:
                 print("-" * 80)
                 print(f"VALIDATING - EPOCH {self.epoch + 1}")
                 print("-" * 80)
@@ -335,7 +335,7 @@ class RealEnv():
                 self.avrg_reward = 0
                 self.suc = 0
                 self.col = 0
-                self.dt = 1 / 100
+                self.dt = 1 / 100'''
             
             # Increment episode number
             self.episode_num += 1
@@ -476,9 +476,6 @@ class RealEnv():
             self.come()
         elif self.train_flag:
             self.train()
-        elif self.evaluate_flag:
-            self.evaluate()
-            rospy.sleep(self.TIME_DELTA)
 
 def main():
     print("\nRUNNING MAIN...")
