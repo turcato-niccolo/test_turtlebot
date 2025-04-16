@@ -106,7 +106,7 @@ class RealEnv():
         self.max_time = 30
         self.max_episode = 100
         self.max_count = 150
-        self.max_timesteps = 200
+        self.max_timesteps = 15000
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
 
@@ -303,8 +303,8 @@ class RealEnv():
 
         if done:
             self.episode_time = rospy.get_time() - self.episode_time
-            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
-            if self.expl_noise > 0.3:
+            print(f"Episode: {self.episode_num} - Reward: {self.episode_reward:.1f} - T: {self.timestep} - Steps: {self.episode_timesteps} - Target: {target:.2f} - Expl Noise: {self.expl_noise:.3f} - Time: {self.episode_time:.1f} s - f: {1/self.dt:.2f}")
+            if self.expl_noise > 0.1:
                 self.expl_noise = self.expl_noise - ((0.3 - 0.1) / 300)
             
             self.training_reward.append(self.episode_reward)
@@ -321,6 +321,9 @@ class RealEnv():
             self.trajectory = []
             self.count = 0
             self.reset()
+
+            # Save model
+            self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}")
 
             # Check if it's time for evaluation (after this episode)
             if self.episode_num > self.max_episode:
@@ -440,7 +443,7 @@ class RealEnv():
             #print("MOVE")
             linear_speed = 0.35 - self.raw_ranges[0]
             angular_speed = 0
-            if self.raw_ranges[0] > 0.3:
+            if self.raw_ranges[0] > 0.35:
                 self.move_flag = False
                 self.align_flag = True
         elif self.align_flag:
@@ -462,7 +465,7 @@ class RealEnv():
         self.laser_scan()
 
         # Check if we have exceeded the maximum number of episodes
-        if self.episode_num > self.max_episode + 1:
+        if self.timestep > self.max_timesteps:
             print("EXITING. GOODBYE!")
             self.publish_velocity([0.0, 0.0])
             rospy.signal_shutdown("EXITING. GOODBYE!")
