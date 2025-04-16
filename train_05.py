@@ -250,7 +250,7 @@ class RealEnv():
             return collision_penalty, done, target
         
         r3 = lambda x: 1 - x if x < 0.5 else 0.0
-        reward = 6*self.linear_vel - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
+        reward = 10*self.linear_vel - np.abs(self.angular_vel / 2) - r3(self.min_dist) / 2
 
         return reward, done, target
 
