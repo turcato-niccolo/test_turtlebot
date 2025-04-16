@@ -28,7 +28,7 @@ class RealEnv():
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
         self.linear_vel, self.angular_vel = 0, 0
-        self.laser_scan = None
+        self.laser_data = None
         self.raw_ranges = None
 
         self.MAX_VEL = [0.5, np.pi/2]
