@@ -66,8 +66,6 @@ class RealEnv():
         rospy.Subscriber('/turtlebot_05/scan', LaserScan, self.callback, queue_size=1)
 
         self.reset()
-
-        self.reset_simulation()
         
         print("ROS NODE INIT...")
     
