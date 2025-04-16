@@ -28,6 +28,9 @@ class RealEnv():
         self.old_action = None
         self.x, self.y, self.theta = -1, 0, 0
         self.linear_vel, self.angular_vel = 0, 0
+        
+        # Lidar params
+        self.num_points = 8
         self.laser_data = None
         self.raw_ranges = None
 
