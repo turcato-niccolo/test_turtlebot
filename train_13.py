@@ -421,7 +421,7 @@ class RealEnv():
         min_dist = np.min(self.raw_ranges)
         angle_increment = 0.01745329238474369
 
-        if min_dist > 0.4:
+        if min_dist > 0.30:
             angle_min = -np.pi + angle_increment * index
             angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
             
@@ -439,7 +439,7 @@ class RealEnv():
 
             if np.abs(angle_target-angle_min) < 0.05:
                 angular_speed = 0
-                linear_speed = 0.80 - min_dist
+                linear_speed = 0.35 - min_dist
             else:
                 angular_speed = angle_target - angle_min
                 linear_speed = 0
