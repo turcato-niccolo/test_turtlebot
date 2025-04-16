@@ -493,7 +493,7 @@ class RealEnv():
     def callback(self, msg):
         # Update the state
         self.msg = msg
-        self.get_state()
+        self.laser_scan()
 
         # Check if we have exceeded the maximum number of episodes
         if self.episode_num > self.max_episode + 1:
