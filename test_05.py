@@ -130,7 +130,7 @@ class RealEnv():
         self.col = 0
         # Initialize flags for state management
         self.train_flag = False
-        self.evaluate_flag = True
+        self.evaluate_flag = False
         self.align_flag = False
         self.stop_flag = False
         self.come_flag = True
@@ -453,7 +453,7 @@ class RealEnv():
             if np.abs(angle_target-angle_min) < 0.05:
                 self.rotation_flag = True
                 self.move_flag = False
-                self.train_flag = True
+                self.evaluate_flag = True
                 self.come_flag = False
 
         self.publish_velocity([np.clip(1.0*linear_speed/self.MAX_VEL[0], 0, 1), 1.0*angular_speed/self.MAX_VEL[1]])
