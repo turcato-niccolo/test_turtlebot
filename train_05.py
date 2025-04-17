@@ -110,7 +110,7 @@ class RealEnv():
         self.eval_freq = 20
 
         self.timestep = 0
-        self.epoch = 0
+        self.epoch = 1
         self.save_model = False
         self.episode_reward = 0
         self.episode_timesteps = 0

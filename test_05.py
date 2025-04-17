@@ -474,6 +474,8 @@ class RealEnv():
             self.come()
         elif self.train_flag:
             self.train()
+        elif self.evaluate_flag:
+            self.evaluate()
 
 def main():
     print("\nRUNNING MAIN...")
