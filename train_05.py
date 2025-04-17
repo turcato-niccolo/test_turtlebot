@@ -102,7 +102,7 @@ class RealEnv():
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
-        self.max_time = 30
+        self.max_time = 17
         self.max_episode = 100
         self.max_count = 150
         self.max_timesteps = 15000
@@ -196,6 +196,7 @@ class RealEnv():
         Process the LaserScan message and extract the laser data.
         """
         self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
+        self.raw_ranges[self.raw_ranges==10] = 0.10
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
         self.min_dist = np.min(self.laser_data)
