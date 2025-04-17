@@ -105,12 +105,12 @@ class RealEnv():
         self.max_time = 17
         self.max_episode = 100
         self.max_count = 150
-        self.max_timesteps = 15000
+        self.max_timesteps = 5000
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
 
         self.timestep = 0
-        self.epoch = 1
+        self.epoch = 0
         self.save_model = False
         self.episode_reward = 0
         self.episode_timesteps = 0
@@ -130,12 +130,12 @@ class RealEnv():
         # Initialize flags for state management
         self.train_flag = False
         self.evaluate_flag = False
-        self.align_flag = False
-        self.stop_flag = False
         self.come_flag = True
+
+        self.align_flag = False
         self.move_flag = False
         self.rotation_flag = True
-        self.initial_positioning = True
+        self.stop_flag = False
         # Episode counters
         self.episode_num = 1    # Start from 1
         self.e = 1              # Evaluation counter
@@ -190,35 +190,41 @@ class RealEnv():
         while angle < -np.pi:
             angle += 2.0 * np.pi
         return angle
-
+    
     def laser_fix(self):
-        for i in range(360):
+        n_samples = len(self.raw_ranges)
+        for i in range(n_samples):
             done = False
             if self.raw_ranges[i] > 1000:
                 while not done:
-                    k, j = 1, 1
-                    while self.raw_ranges[(i - j) % 360] > 1000 or self.raw_ranges[(i + k) % 360] > 1000:
-                        if self.raw_ranges[(i + k) % 360] > 1000:
-                            k += 1
-                        else:
-                            j += 1
-                    mean = (self.raw_ranges[(i - j) % 360] + self.raw_ranges[(i + k) % 360]) / 2
-                    self.raw_ranges[(i - j + 1) % 360 : (i + k) % 360] = mean
-                    done = True
+                    k = 1
+                    while self.raw_ranges[(i+k) % n_samples] > 1000:
+                        k += 1  # Wrap around using modulo
+                    # Look for the next non-outlier value to the left
+                    j = 1
+                    while self.raw_ranges[(i-j) % n_samples] > 1000:
+                        j += 1  # Wrap around using modulo
+                    mean = (self.raw_ranges[(i - j) % n_samples] + self.raw_ranges[(i + k) % n_samples]) / 2
 
+                    # Update the raw_ranges using the modulo to ensure we stay within bounds (0-359)
+                    if (i-j)%n_samples > (i+k)%n_samples:
+                        self.raw_ranges[(i-j+1)%n_samples:] = mean
+                        self.raw_ranges[:(i+k)% n_samples] = mean
+                    else:
+                        self.raw_ranges[(i - j + 1) % n_samples : (i + k) % n_samples] = mean
+                    done = True
+    
     def laser_scan(self):
         """
         Process the LaserScan message and extract the laser data.
         """
         self.raw_ranges = np.array(self.msg.ranges)
-        #print(self.raw_ranges)
         self.laser_fix()
-        print(self.raw_ranges)
-        #self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
+        # Select the laser data at the specified indices
         self.laser_data = self.raw_ranges[indices]
-        self.laser_data = [self.laser_data[8:-1], self.laser_data[:8]]
-        #self.raw_ranges[self.laser_data==10] = 0.20
+        # Invert the laser data to match the robot's perspective
+        self.laser_data = np.concatenate([self.laser_data[8:], self.laser_data[:8]])
         self.min_dist = np.min(self.laser_data)
 
         self.state = np.concatenate((self.laser_data, [self.linear_vel, self.angular_vel]))
@@ -231,7 +237,6 @@ class RealEnv():
         d = 0.173
         r = 0.0325
 
-
         # Velocities
         self.angular_vel = (w_r - w_l) * r / d
         self.linear_vel = (w_r + w_l) * r / 2
@@ -240,7 +245,7 @@ class RealEnv():
         '''Publish velocity commands to the robot'''
         v = action[0] * self.MAX_VEL[0]
         w = action[1] * self.MAX_VEL[1]
-        #print(v, w)
+
         d = 0.173
         r = 0.0325
 
@@ -260,10 +265,10 @@ class RealEnv():
         collision_penalty = -5
         done = False
         target = False
-        min_dist = np.min(self.laser_data)
+        #min_dist = np.min(self.laser_data)
 
         # Check collision with obstacle:
-        if min_dist < 0.2:
+        if self.min_dist < 0.2:
             #print("COLLISION")
             done = True
             target = False
@@ -330,10 +335,10 @@ class RealEnv():
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(target)
             self.training_time.append(self.episode_time)
-            np.save(f"./runs/results/{self.args.policy}/training_reward_seed{self.args.seed}", self.training_reward)
-            np.save(f"./runs/results/{self.args.policy}/training_suc_seed{self.args.seed}", self.training_suc)
-            np.save(f"./runs/results/{self.args.policy}/training_time_seed{self.args.seed}", self.training_time)
-            np.save(f"./runs/results/{self.args.policy}/training_trajectory_seed{self.args.seed}_{self.episode_num}", self.trajectory)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_reward", self.training_reward)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_suc", self.training_suc)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_time", self.training_time)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_trajectory_{self.episode_num}", self.trajectory)
 
             # Reset episode variables
             self.episode_reward = 0
@@ -401,9 +406,9 @@ class RealEnv():
             self.episode_time = rospy.get_time() - self.episode_time
             print(f"Evaluation: {self.e} - Average Reward: {self.avrg_reward / self.e:.1f} - Steps: {self.count} - Target: {target:.2f} - Time: {self.episode_time:.1f} sec")
             
-            self.evaluations_time.append(self.episode_time) if target is True else self.evaluations_time.append(0)
+            self.evaluations_time.append(self.episode_time)
 
-            np.save(f"./runs/results/{self.args.policy}/evaluations_trajectory_seed{self.args.seed}_{self.eval_ep}", self.trajectory)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/evaluations_trajectory_{self.e}", self.trajectory)
             self.trajectory = []
             
             self.e += 1
@@ -414,7 +419,7 @@ class RealEnv():
             self.reset()
 
             # Check if we've completed all evaluation episodes
-            if self.e > self.eval_ep:  # Use > instead of >= since we already incremented
+            if self.e >= self.eval_ep:
                 # Process and save evaluation results
                 self.avrg_reward /= self.eval_ep
                 avrg_col = self.col / self.eval_ep
@@ -427,29 +432,21 @@ class RealEnv():
                 # Save evaluation results
                 self.evaluations_reward.append(self.avrg_reward)
                 self.evaluations_suc.append(avrg_suc)
-                np.save(f"./runs/results/{self.args.policy}/evaluations_reward_seed{self.args.seed}", self.evaluations_reward)
-                np.save(f"./runs/results/{self.args.policy}/evaluations_suc_seed{self.args.seed}", self.evaluations_suc)
-                np.save(f"./runs/results/{self.args.policy}/evaluations_time_seed{self.args.seed}", self.evaluations_time)
+                np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/evaluations_reward", self.evaluations_reward)
+                np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/evaluations_suc", self.evaluations_suc)
 
                 # Save model
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
-                # Save buffer
-                with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
-                    pkl.dump(self.replay_buffer, f)
-
                 # Reset for next evaluation cycle
                 self.epoch += 1
+                self.stop_flag = True
 
     def come(self):
         index = np.argmin(self.raw_ranges)
         min_dist = np.min(self.raw_ranges)
         angle_increment = 0.01745329238474369
         angle_min = np.pi - angle_increment * index
-        #print(f"angle min: {angle_min}")
-        #print(f"index: {index}")
-        #print(f"min dist: {min_dist}")
-        #angular_speed = linear_speed = 0
 
         if self.rotation_flag:
             #print("ROT")
@@ -474,8 +471,15 @@ class RealEnv():
             if np.abs(angle_target-angle_min) < 0.05:
                 self.rotation_flag = True
                 self.move_flag = False
-                self.train_flag = True
+                self.align_flag = False
                 self.come_flag = False
+                if self.stop_flag:
+                    self.train_flag = True
+                    self.evaluate_flag = False
+                else:
+                    self.evaluate_flag = True
+                    self.train_flag = False
+                
 
         self.publish_velocity([np.clip(1.0*linear_speed/self.MAX_VEL[0], 0, 1), 1.0*angular_speed/self.MAX_VEL[1]])
 
@@ -496,12 +500,14 @@ class RealEnv():
             self.come()
         elif self.train_flag:
             self.train()
+        elif self.evaluate_flag:
+            self.evaluate()
 
 def main():
     print("\nRUNNING MAIN...")
     args, kwargs = parse_args()
     
-    os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs/results/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/replay_buffers/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
