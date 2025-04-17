@@ -49,6 +49,7 @@ class RealEnv():
         else:
             pass
         
+        self.args = args
 
         self._initialize_rl(args, kwargs)
         self._init_parameters(args)
@@ -97,8 +98,6 @@ class RealEnv():
     def _init_parameters(self, args):
         # Parameters
         self.dt = 1 / 100
-
-        self.args = args
 
         self.max_action = float(1)
         self.batch_size = args.batch_size
