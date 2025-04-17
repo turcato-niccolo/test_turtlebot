@@ -189,15 +189,35 @@ class RealEnv():
         while angle < -np.pi:
             angle += 2.0 * np.pi
         return angle
-
+    
+    def laser_fix(self):
+        for i in range(360):
+            done = False
+            if self.raw_ranges[i] > 1000:
+                while not done:
+                    k, j = 1, 1
+                    while self.raw_ranges[(i - j) % 360] > 1000 or self.raw_ranges[(i + k) % 360] > 1000:
+                        if self.raw_ranges[(i + k) % 360] > 1000:
+                            k += 1
+                        else:
+                            j += 1
+                    mean = (self.raw_ranges[(i - j) % 360] + self.raw_ranges[(i + k) % 360]) / 2
+                    # Update the raw_ranges using the modulo to ensure we stay within bounds (0-359)
+                    self.raw_ranges[(i - j + 1) % 360 : (i + k) % 360] = mean
+                    done = True
+    
     def laser_scan(self):
         """
         Process the LaserScan message and extract the laser data.
         """
-        self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
+        self.raw_ranges = np.array(self.msg.ranges)
+        #print(self.raw_ranges)
+        self.laser_fix()
+        print(self.raw_ranges)
+        #self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
-        self.raw_ranges[self.lase_data==10] = 0.20
+        #self.raw_ranges[self.laser_data==10] = 0.20
         self.min_dist = np.min(self.laser_data)
 
         self.state = np.concatenate((self.laser_data, [self.linear_vel, self.angular_vel]))
@@ -239,10 +259,10 @@ class RealEnv():
         collision_penalty = -5
         done = False
         target = False
-        min_dist = np.min(self.raw_ranges)
+        #min_dist = np.min(self.laser_data)
 
         # Check collision with obstacle:
-        if min_dist < 0.15:
+        if self.min_dist < 0.15:
             #print("COLLISION")
             done = True
             target = False
