@@ -7,7 +7,7 @@ for algo in "${algorithms[@]}"; do
         if [ "$algo" == "SAC" ]; then
             expl_noise=0.0
         else
-            expl_noise=0.3
+            expl_noise=0.1
         fi
 
         python3 train_05.py \
