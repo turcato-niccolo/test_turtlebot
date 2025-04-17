@@ -480,7 +480,6 @@ class RealEnv():
                     self.evaluate_flag = True
                     self.train_flag = False
                 
-
         self.publish_velocity([np.clip(1.0*linear_speed/self.MAX_VEL[0], 0, 1), 1.0*angular_speed/self.MAX_VEL[1]])
 
     def callback(self, msg):
