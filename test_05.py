@@ -217,6 +217,7 @@ class RealEnv():
         #self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
+        self.laser_data = [self.laser_data[8:-1], self.laser_data[:8]]
         #self.raw_ranges[self.laser_data==10] = 0.20
         self.min_dist = np.min(self.laser_data)
 
@@ -262,7 +263,7 @@ class RealEnv():
         #min_dist = np.min(self.laser_data)
 
         # Check collision with obstacle:
-        if self.min_dist < 0.15:
+        if self.min_dist < 0.2:
             #print("COLLISION")
             done = True
             target = False

@@ -260,7 +260,7 @@ class RealEnv():
         collision_penalty = -5
         done = False
         target = False
-        min_dist = np.min(self.raw_ranges)
+        min_dist = np.min(self.laser_data)
 
         # Check collision with obstacle:
         if min_dist < 0.2:
