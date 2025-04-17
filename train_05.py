@@ -465,7 +465,7 @@ class RealEnv():
                 self.align_flag = True
         elif self.align_flag:
             #print("ALIGN")
-            angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
+            angle_target = np.random.choice([np.pi/2, -np.pi/2])
             angular_speed = angle_target - angle_min
             linear_speed = 0
             if np.abs(angle_target-angle_min) < 0.05:
