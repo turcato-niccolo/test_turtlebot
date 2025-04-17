@@ -418,6 +418,7 @@ class RealEnv():
 
                 # Reset for next evaluation cycle
                 self.epoch += 1
+                self.episode_num += 1
 
     def come(self):
         index = np.argmin(self.raw_ranges)
