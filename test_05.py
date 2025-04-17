@@ -102,7 +102,7 @@ class RealEnv():
         self.max_action = float(1)
         self.batch_size = args.batch_size
 
-        self.max_time = 30
+        self.max_time = 17
         self.max_episode = 1
         self.max_count = 150
         self.max_timesteps = 15000
@@ -191,20 +191,38 @@ class RealEnv():
         return angle
     
     def laser_fix(self):
-        for i in range(360):
+        n_samples = len(self.raw_ranges)
+        for i in range(n_samples):
             done = False
             if self.raw_ranges[i] > 1000:
                 while not done:
+                    """
                     k, j = 1, 1
-                    while self.raw_ranges[(i - j) % 360] > 1000 or self.raw_ranges[(i + k) % 360] > 1000:
-                        if self.raw_ranges[(i + k) % 360] > 1000:
+                    while self.raw_ranges[(i - j) % n_samples] > 1000 or self.raw_ranges[(i + k) % n_samples] > 1000:
+                        if self.raw_ranges[(i + k) % n_samples] > 1000:
                             k += 1
                         else:
                             j += 1
-                    mean = (self.raw_ranges[(i - j) % 360] + self.raw_ranges[(i + k) % 360]) / 2
-                    # Update the raw_ranges using the modulo to ensure we stay within bounds (0-359)
-                    self.raw_ranges[(i - j + 1) % 360 : (i + k) % 360] = mean
+                    mean = (self.raw_ranges[(i - j) % n_samples] + self.raw_ranges[(i + k) % n_samples]) / 2
+                    """
+                    k = 1
+                    while self.raw_ranges[(i+k) % n_samples] > 1000:
+                        k += 1  # Wrap around using modulo
+                    # Look for the next non-outlier value to the left
+                    j = 1
+                    while self.raw_ranges[(i-j) % n_samples] > 1000:
+                        j += 1  # Wrap around using modulo
+                    mean = (self.raw_ranges[(i - j) % n_samples] + self.raw_ranges[(i + k) % n_samples]) / 2
+
+            # Update the raw_ranges using the modulo to ensure we stay within bounds (0-359)
+                    if (i-j)%n_samples > (i+k)%n_samples:
+                        self.raw_ranges[(i-j+1)%n_samples:] = mean
+                        self.raw_ranges[:(i+k)% n_samples] = mean
+                    else:
+                        self.raw_ranges[(i - j + 1) % n_samples : (i + k) % n_samples] = mean
                     done = True
+#        if np.isinf(self.raw_ranges[-1]):
+#            self.raw_ranges[-1] = (self.raw_ranges[0]+self.raw_ranges[-2]) / 2
     
     def laser_scan(self):
         """
@@ -213,12 +231,16 @@ class RealEnv():
         self.raw_ranges = np.array(self.msg.ranges)
         #print(self.raw_ranges)
         self.laser_fix()
-        print(self.raw_ranges)
+        #if np.any(np.isinf(self.raw_ranges)):
+            #print("RAW RANGES: ", self.raw_ranges)
+	    
         #self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
         self.laser_data = np.concatenate([self.laser_data[8:], self.laser_data[:8]])
         #self.raw_ranges[self.laser_data==10] = 0.20
+        #if np.any(np.isinf(self.laser_data)):
+            #print("LASER DATA ", self.laser_data)
         self.min_dist = np.min(self.laser_data)
 
         self.state = np.concatenate((self.laser_data, [self.linear_vel, self.angular_vel]))
@@ -374,6 +396,10 @@ class RealEnv():
         action = self.policy.select_action(self.state) if self.expl_noise != 0 else self.policy.select_action(self.state, True)
         
         a_in = [(action[0] + 1)/ 2, action[1]]
+        #if np.any(np.isnan(a_in)):
+            #print(a_in)
+            #print("STATO: ", self.state)
+
         self.publish_velocity(a_in)
 
         reward, done, _ = self.get_reward()

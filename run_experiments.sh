@@ -3,20 +3,20 @@
 algorithms=("TD3")
 
 for algo in "${algorithms[@]}"; do
-    for seed in {0..0}; do
+    for seed in {3..3}; do
         if [ "$algo" == "SAC" ]; then
             expl_noise=0.0
         else
             expl_noise=0.1
         fi
 
-        python3 train_05.py \
+        python3 test_05.py \
             --policy "$algo" \
             --hidden_size 64 \
             --batch_size 128 \
             --seed "$seed" \
             --expl_noise "$expl_noise" \
-            --load_model ""
+            --load_model "default"
     done
 done
 
