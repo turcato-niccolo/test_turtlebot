@@ -195,7 +195,7 @@ class RealEnv():
         Process the LaserScan message and extract the laser data.
         """
         self.raw_ranges = np.clip(np.array(self.msg.ranges), 0, 10)
-        self.raw_ranges[self.raw_ranges==10] = 0.10
+        self.raw_ranges[self.raw_ranges==10] = 0.20
         indices = np.linspace(0, len(self.raw_ranges)-1, num=self.num_points, dtype=int)
         self.laser_data = self.raw_ranges[indices]
         self.min_dist = np.min(self.laser_data)
@@ -242,7 +242,7 @@ class RealEnv():
         min_dist = np.min(self.raw_ranges)
 
         # Check collision with obstacle:
-        if min_dist < 0.2:
+        if min_dist < 0.15:
             #print("COLLISION")
             done = True
             target = False
