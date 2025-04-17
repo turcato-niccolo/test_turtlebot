@@ -413,8 +413,8 @@ class RealEnv():
                 self.policy.save(f"./runs/models/{self.args.policy}/seed{self.args.seed}/{self.epoch}")
 
                 # Save buffer
-                with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
-                    pkl.dump(self.replay_buffer, f)
+                '''with open(f"./runs/replay_buffers/{self.args.policy}/replay_buffer_seed{self.args.seed}.pkl", 'wb') as f:
+                    pkl.dump(self.replay_buffer, f)'''
 
                 # Reset for next evaluation cycle
                 self.epoch += 1
