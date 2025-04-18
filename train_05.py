@@ -118,6 +118,7 @@ class RealEnv():
         self.episode_timesteps = 0
         self.count = 0
 
+        self.training_timesteps = []
         self.training_reward = []
         self.training_time = []
         self.training_suc = []
@@ -342,9 +343,11 @@ class RealEnv():
             self.training_reward.append(self.episode_reward)
             self.training_suc.append(target)
             self.training_time.append(self.episode_time)
+            self.training_timesteps.append(self.timestep)
             np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_reward", self.training_reward)
             np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_suc", self.training_suc)
             np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_time", self.training_time)
+            np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_timesteps", self.training_timesteps)
             np.save(f"./runs/results/{self.args.policy}/seed{self.args.seed}/training_trajectory_{self.episode_num}", self.trajectory)
 
             # Reset episode variables
