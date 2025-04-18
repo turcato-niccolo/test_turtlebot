@@ -463,7 +463,7 @@ class RealEnv():
             angle_target = np.pi if angle_min > 0 else -np.pi
             angular_speed = angle_target - angle_min
             linear_speed = 0.01
-            if np.abs(angle_target-angle_min) < 0.1 or min_dist >= 0.3:
+            if np.abs(angle_target - angle_min) < 0.1 or min_dist >= 0.3:
                 self.rotation_flag = False
                 self.move_flag = True
         elif self.move_flag:
@@ -473,11 +473,12 @@ class RealEnv():
             if self.raw_ranges[0] > 0.34:
                 self.move_flag = False
                 self.align_flag = True
+                self.angle_target_align += angle_min
         elif self.align_flag:
             #print("ALIGN")
             angular_speed = self.angle_target_align - angle_min
             linear_speed = 0
-            if np.abs(self.angle_target_align-angle_min) < 0.05:
+            if np.abs(self.angle_target_align - angle_min) < 0.05:
                 self.rotation_flag = True
                 self.move_flag = False
                 self.align_flag = False
