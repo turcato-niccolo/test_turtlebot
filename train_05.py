@@ -294,7 +294,7 @@ class RealEnv():
         if self.count == 0:
             self.episode_time = rospy.get_time()
 
-        if self.timestep > self.min_timesteps:
+        if self.timestep > self.min_timesteps or self.args.load_model:
             action = self.policy.select_action(self.state)
             action = (action + np.random.normal(0, self.expl_noise, size=self.action_dim)
                         ).clip(-self.max_action, self.max_action)
