@@ -311,10 +311,10 @@ class RealEnv():
         reward, done, _ = self.get_reward()
         self.episode_reward += reward
 
-        elapsed_time = np.clip(rospy.get_time() - self.episode_time,0,1)
+        elapsed_time = rospy.get_time() - self.episode_time
         if elapsed_time > self.max_time:
             done = True
-        target = elapsed_time / self.max_time
+        target = np.clip(elapsed_time / self.max_time,0,1)
         '''if self.count > self.max_count:
             done = True'''
 
@@ -421,7 +421,7 @@ class RealEnv():
             self.reset()
 
             # Check if we've completed all evaluation episodes
-            if self.e >= self.eval_ep:
+            if self.e > self.eval_ep:
                 # Process and save evaluation results
                 self.avrg_reward /= self.eval_ep
                 avrg_col = self.col / self.eval_ep
