@@ -277,7 +277,11 @@ class RealEnv():
     def reset(self):
         '''Stop an change the initial position of the robot'''
         self.publish_velocity([0, 0])
-        self.angle_target_align = np.random.choice([np.pi/2, -np.pi/2])
+        #self.angle_target_align = np.random.choice([np.pi/2, -np.pi/2])
+        if self.angle_target_align > 0:
+            self.angle_target_align = -np.pi/2
+        else:
+            self.angle_target_align = +np.pi/2
         rospy.sleep(0.5)
     
     def get_reward(self):
