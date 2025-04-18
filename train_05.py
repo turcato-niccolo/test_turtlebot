@@ -107,6 +107,7 @@ class RealEnv():
         self.max_episode = 100
         self.max_count = 150
         self.max_timesteps = 5000
+        self.min_timesteps = 250
         self.expl_noise = args.expl_noise
         self.eval_freq = 20
 
@@ -293,7 +294,7 @@ class RealEnv():
         if self.count == 0:
             self.episode_time = rospy.get_time()
 
-        if self.timestep > self.max_timesteps:
+        if self.timestep > self.min_timesteps:
             action = self.policy.select_action(self.state)
             action = (action + np.random.normal(0, self.expl_noise, size=self.action_dim)
                         ).clip(-self.max_action, self.max_action)
@@ -303,7 +304,7 @@ class RealEnv():
         a_in = [(action[0] + 1)/ 2, action[1]]
         self.publish_velocity(a_in)
 
-        if self.timestep > self.max_timesteps:
+        if self.timestep > self.min_timesteps:
             train_time = rospy.get_time()
             self.policy.train(self.replay_buffer, batch_size=self.batch_size)
             train_time = rospy.get_time() - train_time
