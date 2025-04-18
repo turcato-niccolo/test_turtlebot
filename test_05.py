@@ -33,6 +33,8 @@ class RealEnv():
         self.num_points = 8*2
         self.laser_data = None
         self.raw_ranges = None
+        self.angle_target_align = np.random.choice([np.pi/2, -np.pi/2])
+
 
         self.MAX_VEL = [0.35, np.pi/2]
         self.HOME = [-1, 0]
@@ -275,6 +277,7 @@ class RealEnv():
     def reset(self):
         '''Stop an change the initial position of the robot'''
         self.publish_velocity([0, 0])
+        self.angle_target_align = np.random.choice([np.pi/2, -np.pi/2])
         rospy.sleep(0.5)
     
     def get_reward(self):
@@ -409,7 +412,7 @@ class RealEnv():
         if elapsed_time > self.max_time:
             done = True
         
-        target = elapsed_time / self.max_time
+        target = np.clip(elapsed_time / self.max_time,0,1)
         '''if self.count > self.max_count:
             done = True'''
 
@@ -494,10 +497,9 @@ class RealEnv():
                 self.align_flag = True
         elif self.align_flag:
             #print("ALIGN")
-            angle_target = np.pi/2 if angle_min > 0 else -np.pi/2
-            angular_speed = angle_target - angle_min
+            angular_speed = self.angle_target_align - angle_min
             linear_speed = 0
-            if np.abs(angle_target-angle_min) < 0.05:
+            if np.abs(self.angle_target_align-angle_min) < 0.05:
                 self.rotation_flag = True
                 self.move_flag = False
                 self.evaluate_flag = True
@@ -529,7 +531,7 @@ def main():
     print("\nRUNNING MAIN...")
     args, kwargs = parse_args()
     
-    os.makedirs(f"./runs/results/{args.policy}", exist_ok=True)
+    os.makedirs(f"./runs/results/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/replay_buffers/{args.policy}", exist_ok=True)
     os.makedirs(f"./runs/models/{args.policy}/seed{args.seed}", exist_ok=True)
     os.makedirs(f"./runs/trajectories/{args.policy}/seed{args.seed}", exist_ok=True)
