@@ -33,7 +33,7 @@ class RealEnv():
         self.num_points = 8*2
         self.laser_data = None
         self.raw_ranges = None
-        self.angle_target_align = np.random.choice([np.pi/2, -np.pi/2])
+        self.angle_target_align = np.pi/2
 
         self.MAX_VEL = [0.35, np.pi/2]
         self.HOME = [-1, 0]
